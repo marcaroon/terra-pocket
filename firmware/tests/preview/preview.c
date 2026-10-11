@@ -28,7 +28,7 @@ static void flush(lv_display_t *display, const lv_area_t *area, uint8_t *map)
 int main(int argc, char **argv)
 {
     if (argc != 2 && argc != 3) {
-        fputs("Usage: ui-preview output.ppm [long-text|zero-duration]\n", stderr);
+        fputs("Usage: ui-preview output.ppm [long-text|zero-duration|waiting|no-media|mismatch]\n", stderr);
         return 2;
     }
     lv_init();
@@ -38,10 +38,10 @@ int main(int argc, char **argv)
                            LV_DISPLAY_RENDER_MODE_FULL);
     lv_display_set_flush_cb(display, flush);
     media_state_t fixture = {
-        .connection = CONNECTION_DISCONNECTED,
-        .demo = true, .source = "DEMO", .title = "Test Song", .artist = "Test Artist",
-        .position_ms = 60000, .duration_ms = 180000,
-        .volume = 72, .playback = PLAYBACK_PLAYING,
+        .link = LINK_READY, .playback = PLAYBACK_PLAYING,
+        .source = "Spotify", .title = "Test Song", .artist = "Test Artist",
+        .position_ms = 60000, .duration_ms = 180000, .last_sync_ms = 0,
+        .volume_known = true, .volume = 72,
     };
     if (argc == 3) {
         if (strcmp(argv[2], "long-text") == 0) {
@@ -51,11 +51,18 @@ int main(int argc, char **argv)
             fixture.playback = PLAYBACK_PAUSED;
         } else if (strcmp(argv[2], "zero-duration") == 0) {
             fixture.duration_ms = 0;
+        } else if (strcmp(argv[2], "waiting") == 0) {
+            fixture.link = LINK_ADVERTISING;
+        } else if (strcmp(argv[2], "no-media") == 0) {
+            fixture.playback = PLAYBACK_NO_MEDIA;
+        } else if (strcmp(argv[2], "mismatch") == 0) {
+            fixture.link = LINK_PROTOCOL_MISMATCH;
         } else {
             return 2;
         }
     }
-    ui_render(lv_display_get_screen_active(display), &fixture);
+    ui_create(lv_display_get_screen_active(display));
+    ui_update(&fixture, 0);
     lv_refr_now(display);
     lv_obj_t *screen = lv_display_get_screen_active(display);
     for (uint32_t i = 0; i < lv_obj_get_child_count(screen); ++i) {

@@ -3,4 +3,6 @@
 #include "app_state.h"
 
 esp_err_t display_init(void);
-esp_err_t display_render(const media_state_t *state);
+/* Builds the UI, renders the first frame, turns the backlight on and starts a
+ * periodic refresh from app_state inside the LVGL task. */
+esp_err_t display_start_ui(void);

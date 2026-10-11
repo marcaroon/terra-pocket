@@ -1,5 +1,36 @@
 # Laporan validasi
 
+## M3/M4 — 12 Oktober 2026
+
+**Compile verified:** build `normal` 878.821 byte dan `usb-probe` 945.197 byte, ESP-IDF
+6.0.3, tanpa warning (`-Werror`). Partisi aplikasi 3 MiB.
+
+**Software tested:** `scripts/test-host.ps1` lulus termasuk 57 vector protokol C;
+`cargo test -p protocol` lulus pada vector yang sama; uji mutasi (satu byte vector
+diubah) membuat tes C gagal sesuai harapan. Renderer host: enam layar (playing,
+long-text, zero-duration, waiting, no-media, mismatch) dalam batas panel.
+
+**Hardware tested** (board pengguna di COM11, Bluetooth laptop Intel, harness
+`scripts/ble-test.py`, bleak 1.1.1):
+
+- Advertising `Terra` dengan UUID service terlihat, RSSI −32 dBm di meja.
+- Connect, MTU 247, service + RX/TX/STATUS dengan properti benar.
+- STATUS CONNECTED sebelum handshake; subscribe TX → HELLO (protocol 1, firmware
+  0.2.0, caps 0x0003); HELLO_ACK → READY.
+- Tulis RX VOLUME_STATE + MEDIA_STATE diterima tanpa ERROR. MEDIA_STATE maksimum
+  361 byte direassembly dari 2 paket (MTU 247) dan 23 paket (`--mtu 23`).
+- Title 128 byte → ERROR MALFORMED; versi 2 → UNSUPPORTED_VERSION; fragmen tanpa
+  START dibuang; MEDIA_COMMAND dari PC → UNSUPPORTED_TYPE. Perangkat tetap READY,
+  `rx_errors` naik 4 per putaran, tidak ada reboot.
+- Empat sesi connect/disconnect berturut-turut; setelah disconnect advertising lagi.
+- Log UART build `usb-probe` cocok dengan development.md, termasuk metadata UTF-8
+  multibyte dan emoji.
+
+**Belum diverifikasi:** tampilan layar selama uji (menunggu konfirmasi visual
+pengguna), log USB native build `normal`, nRF Connect/ponsel, jarak/interferensi,
+dan durasi koneksi panjang. Companion Windows (M5/M6) belum ada; harness hanya
+alat uji.
+
 ## Uji hardware pertama 11 Oktober 2026 — M1/M2 di perangkat
 
 Board terdeteksi di COM11 (bridge CH343 `1A86:55D3`). esptool: ESP32-S3 (QFN56)

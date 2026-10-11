@@ -1,0 +1,8 @@
+{
+  "name": "media_state_nul",
+  "kind": "media_state",
+  "expect": "malformed",
+  "note": "NUL byte",
+  "bytes": "01010000000200000000030000410042",
+  "fields": []
+}

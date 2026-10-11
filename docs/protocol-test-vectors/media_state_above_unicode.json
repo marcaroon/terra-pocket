@@ -1,0 +1,8 @@
+{
+  "name": "media_state_above_unicode",
+  "kind": "media_state",
+  "expect": "malformed",
+  "note": "code point above U+10FFFF",
+  "bytes": "01010000000200000000040000f4908080",
+  "fields": []
+}

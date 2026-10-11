@@ -1,0 +1,13 @@
+{
+  "name": "fragment_volume_mtu23",
+  "kind": "fragment",
+  "expect": "ok",
+  "note": "single packet",
+  "bytes": "0600011103004800",
+  "fields": [
+    17,
+    0,
+    23,
+    "4800"
+  ]
+}

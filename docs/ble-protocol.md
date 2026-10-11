@@ -1,30 +1,198 @@
-# BLE protocol V1 — spesifikasi, belum diimplementasikan
+# Terra BLE protocol V1
 
-Rujukan kanonik wire format adalah **PROJECT_SPEC.md bagian 11–17**. Dokumen ini
-adalah indeks implementasi untuk M3/M4, bukan spesifikasi tandingan.
+Dokumen ini adalah **spesifikasi kanonik wire format V1**. Ia memperinci
+PROJECT_SPEC.md bagian 11–17 dan menutup keputusan yang dulu terbuka (sequence,
+reassembly, ACK, ERROR, HELLO/HELLO_ACK, DEVICE_STATUS). Firmware C
+(`firmware/main/protocol/`), crate Rust `protocol`, dan referensi Python
+(`scripts/terra_protocol.py`) wajib mengikuti dokumen ini dan lulus
+[test vector bersama](protocol-test-vectors/README.md).
 
-- Peripheral: ESP32-S3, nama `Terra`; central: Windows.
-- Service: `6F3A0001-9B21-4C71-9A8B-31A8B9F10001`.
-- RX `6F3A0002-9B21-4C71-9A8B-31A8B9F10001`: write / write without response.
-- TX `6F3A0003-9B21-4C71-9A8B-31A8B9F10001`: notify.
-- Status `6F3A0004-9B21-4C71-9A8B-31A8B9F10001`: read / notify.
+Semua bilangan multi-byte **little endian**. Semua panjang dihitung dalam byte.
 
-Header empat byte: version, message type, flags, sequence. Flags START=1, END=2,
-ACK_REQUEST=4. Payload biner little endian, direassembly sebelum parsing.
-MEDIA_STATE: playback u8, position u32, duration u32, empat panjang u8, lalu UTF-8
-source/title/artist/album. Batas byte 31/127/95/95; maksimum payload 361 byte.
-VOLUME_STATE: volume 0–100 dan muted 0/1. MEDIA_COMMAND: command u8 + value i16.
-Lihat spesifikasi untuk enum pesan dan command.
+## 1. GATT
 
-## Keputusan yang wajib ditutup sebelum M4
+| Item | UUID | Properti |
+| --- | --- | --- |
+| Service | `6F3A0001-9B21-4C71-9A8B-31A8B9F10001` | — |
+| RX (PC → ESP32) | `6F3A0002-9B21-4C71-9A8B-31A8B9F10001` | write, write without response |
+| TX (ESP32 → PC) | `6F3A0003-9B21-4C71-9A8B-31A8B9F10001` | notify |
+| DEVICE STATUS | `6F3A0004-9B21-4C71-9A8B-31A8B9F10001` | read, notify |
 
-Blueprint belum menentukan semantik sequence antarfragmen, timeout reassembly,
-ACK_REQUEST/ERROR payload, HELLO_ACK payload, atau format DEVICE_STATUS.
-Selain itu HELLO tidak boleh hilang sebelum central berlangganan TX.
-Tetapkan aturan tersebut secara eksplisit di spesifikasi kanonik sebelum membuat
-codec; jangan membiarkan Rust dan C mengasumsikan format berbeda.
+Nama advertising `Terra`; UUID service ada di scan response. Satu koneksi
+central dalam satu waktu. Tidak ada pairing/bonding di V1; karakteristik tidak
+memerlukan enkripsi. Firmware meminta ATT MTU 247.
 
-Saat M4, kedua implementasi wajib membaca fixture yang sama di
-`protocol-test-vectors/`, meliputi malformed length, versi salah, batas UTF-8,
-fragment tidak lengkap, overflow, dan disconnect. Tidak ada kode protokol atau
-fixture pura-pura pada M0/M1.
+RX dan TX membawa **paket** (§2). DEVICE STATUS berisi payload DEVICE_STATUS
+mentah (§4.6) **tanpa** header paket.
+
+## 2. Paket dan fragmentasi
+
+```text
+byte 0  version   = 1
+byte 1  type      (tabel §3)
+byte 2  flags     START 0x01, END 0x02, ACK_REQUEST 0x04
+byte 3  sequence  u8
+byte 4+ potongan payload pesan
+```
+
+- Panjang paket maksimum = ATT MTU − 3 (MTU minimum 23 → 20 byte, yaitu 16 byte
+  payload per paket). Panjang paket minimum 4 byte.
+- Bit flag selain 0x07 harus 0; paket dengan bit lain ditolak.
+- **ACK_REQUEST dicadangkan di V1**: pengirim tidak boleh men-set-nya, penerima
+  mengabaikannya. Tidak ada pesan ACK di V1.
+- **Sequence** adalah penghitung pesan per arah milik pengirim, mulai 0, naik satu
+  per pesan dan kembali ke 0 setelah 255. Semua fragmen satu pesan memakai
+  sequence dan type yang sama. Penerima tidak mewajibkan sequence berurutan antar
+  pesan; sequence dipakai untuk mengikat fragmen dan untuk ERROR.
+- Pesan muat satu paket: flags `START|END`. Pesan terfragmentasi: paket pertama
+  `START`, tengah `0`, terakhir `END`. Payload kosong dikirim sebagai satu paket
+  4 byte `START|END`.
+- Ukuran payload pesan setelah reassembly maksimum **512 byte**.
+
+### Aturan reassembly penerima
+
+1. Paket < 4 byte, version ≠ 1, atau flag tak dikenal: paket dibuang
+   (`BAD_PACKET` / `BAD_VERSION`). Pesan parsial yang sedang berjalan tetap.
+2. Paket `START`: pesan parsial sebelumnya dibuang (`INCOMPLETE`), mulai pesan baru.
+3. Paket tanpa `START` saat tidak ada pesan parsial: dibuang (`NO_START`).
+4. Paket lanjutan dengan type atau sequence berbeda: pesan parsial dan paket
+   dibuang (`MISMATCH`).
+5. Total payload > 512 byte: pesan parsial dibuang (`TOO_LARGE`).
+6. Jeda > **1000 ms** sejak fragmen terakhir: pesan parsial dibuang saat paket
+   berikutnya tiba (`TIMEOUT`); paket baru lalu diproses sesuai aturan 2–5.
+7. Disconnect atau unsubscribe mereset reassembler.
+8. Paket `END` menyelesaikan pesan; payload diberikan ke parser pesan.
+
+Paket yang dibuang tidak memutus koneksi dan tidak boleh me-reboot perangkat.
+
+## 3. Tipe pesan
+
+| Type | Nama | Arah | Payload |
+| --- | --- | --- | --- |
+| 0x01 | HELLO | ESP → PC | 6 byte (§4.1) |
+| 0x02 | HELLO_ACK | PC → ESP | 5 byte (§4.2) |
+| 0x10 | MEDIA_STATE | PC → ESP | 13–361 byte (§4.3) |
+| 0x11 | VOLUME_STATE | PC → ESP | 2 byte (§4.4) |
+| 0x20 | MEDIA_COMMAND | ESP → PC | 3 byte (§4.5) |
+| 0x30 | DEVICE_STATUS | ESP → PC | 8 byte (§4.6) |
+| 0x40 | ERROR | dua arah | 3 byte (§4.7) |
+
+Tipe 0x50–0x52, 0x60, 0x70 dicadangkan untuk masa depan dan **tidak** didukung di
+V1. Payload harus tepat sepanjang yang didefinisikan; byte berlebih atau kurang
+berarti pesan malformed.
+
+## 4. Payload
+
+### 4.1 HELLO
+
+```text
+u8  protocol_version   = 1
+u8  firmware_major
+u8  firmware_minor
+u8  firmware_patch
+u16 capabilities       bit0 render MEDIA_STATE, bit1 render VOLUME_STATE,
+                       bit2 mengirim MEDIA_COMMAND; bit lain 0
+```
+
+### 4.2 HELLO_ACK
+
+```text
+u8  protocol_version   versi yang dipakai companion
+u8  companion_major
+u8  companion_minor
+u8  companion_patch
+u8  status             0 = accepted, 1 = rejected (versi tidak cocok)
+```
+
+### 4.3 MEDIA_STATE
+
+```text
+u8  playback       0 = NO_MEDIA, 1 = PLAYING, 2 = PAUSED
+u32 position_ms
+u32 duration_ms
+u8  source_length  ≤ 31
+u8  title_length   ≤ 127
+u8  artist_length  ≤ 95
+u8  album_length   ≤ 95
+    source, title, artist, album: UTF-8 valid, tanpa byte 0x00
+```
+
+Panjang payload = 13 + jumlah keempat panjang. `duration_ms = 0` sah (durasi tidak
+diketahui). `position_ms > duration_ms` sah di wire; penerima men-clamp untuk
+tampilan. Nilai playback lain, UTF-8 tidak valid (termasuk overlong, surrogate,
+atau > U+10FFFF), atau panjang melebihi batas → malformed.
+
+### 4.4 VOLUME_STATE
+
+```text
+u8 volume  0–100
+u8 muted   0 = false, 1 = true
+```
+
+### 4.5 MEDIA_COMMAND
+
+```text
+u8  command  0x01 PLAY_PAUSE, 0x02 NEXT, 0x03 PREVIOUS,
+             0x04 VOLUME_DELTA, 0x05 MUTE_TOGGLE, 0x06 SEEK_DELTA (dicadangkan)
+i16 value
+```
+
+`value` harus 0 untuk PLAY_PAUSE, NEXT, PREVIOUS, MUTE_TOGGLE. VOLUME_DELTA
+memakai −100…100 kecuali 0 (encoder V1: +2 / −2). SEEK_DELTA tidak didukung di V1.
+
+### 4.6 DEVICE_STATUS
+
+```text
+u8  protocol_version   = 1
+u8  firmware_major
+u8  firmware_minor
+u8  firmware_patch
+u8  link_state         0 ADVERTISING, 1 CONNECTED, 2 READY, 3 PROTOCOL_MISMATCH
+u8  flags              0 di V1
+u16 rx_errors          paket/pesan ditolak sejak boot, jenuh di 65535
+```
+
+Nilai karakteristik DEVICE STATUS selalu 8 byte ini. Firmware memberi notify
+karakteristik saat link_state berubah. Pesan 0x30 didefinisikan untuk transport
+lain; firmware V1 tidak mengirimnya lewat TX.
+
+### 4.7 ERROR
+
+```text
+u8 code          1 UNSUPPORTED_VERSION, 2 MALFORMED, 3 UNSUPPORTED_TYPE,
+                 4 TOO_LARGE, 5 NOT_READY
+u8 related_type  type pesan yang ditolak
+u8 related_seq   sequence pesan yang ditolak
+```
+
+Penerima ERROR hanya mencatatnya; tidak ada balasan ERROR untuk ERROR.
+
+## 5. Handshake dan state link
+
+```text
+ESP32: ADVERTISING ─connect─► CONNECTED ─HELLO_ACK ok─► READY
+                                   └──HELLO_ACK ditolak / versi beda──► PROTOCOL_MISMATCH
+disconnect dari state mana pun ─► ADVERTISING (reassembler dan media direset)
+```
+
+1. Central terhubung dan (opsional) menukar MTU.
+2. Central mengaktifkan notify TX. **Firmware mengirim HELLO saat notify TX aktif**,
+   bukan saat connect, agar HELLO tidak hilang. Unsubscribe lalu subscribe ulang
+   mengembalikan link ke CONNECTED dan mengirim HELLO baru.
+3. Companion membalas HELLO_ACK. Jika `HELLO.protocol_version` ≠ 1 companion
+   mengirim status 1 dan berhenti menyinkronkan media.
+4. Firmware masuk READY hanya jika HELLO_ACK `protocol_version = 1` dan
+   `status = 0`; selain itu PROTOCOL_MISMATCH dan layar menampilkan ketidakcocokan.
+5. MEDIA_STATE / VOLUME_STATE sebelum READY dijawab ERROR `NOT_READY`.
+6. Firmware menjawab pesan yang di-reassembly tetapi tidak sah dengan ERROR:
+   versi beda `UNSUPPORTED_VERSION` (hanya pada paket START), payload salah
+   `MALFORMED`, tipe tidak didukung arah ini `UNSUPPORTED_TYPE`, terlalu besar
+   `TOO_LARGE`. Pembuangan fragmen lainnya hanya menaikkan `rx_errors`.
+
+## 6. Timeline
+
+Firmware menyimpan `position_ms` sebagai posisi dasar dan waktu monotonic saat
+MEDIA_STATE diterima. Saat PLAYING, posisi tampil = dasar + (sekarang − waktu
+terima), di-clamp ke `duration_ms` bila durasi > 0. PAUSED/NO_MEDIA tidak
+menambah posisi. Companion mengirim MEDIA_STATE saat track, playback, seek, atau
+timeline berubah, bukan setiap 100 ms.

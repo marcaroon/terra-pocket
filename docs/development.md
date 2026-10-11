@@ -1,9 +1,9 @@
 # Development
 
-Fase terkini: **M2 input + N0 USB diagnostics**. Mulai dari
-[panduan build dan uji M2/N0](m2-n0-test.md). Profil normal menggunakan native USB;
-profil USB Host menggunakan COM/UART. Bagian M1 di bawah dipertahankan untuk
-verifikasi layar; startup kini berjudul `Terra - M2 input diagnostics, LCD 240x240`.
+Fase terkini: **M3 BLE GATT + M4 protokol** di atas M2 input dan N0 diagnostik USB.
+Wire format kanonik: [ble-protocol.md](ble-protocol.md). Uji M2/N0 tetap di
+[m2-n0-test.md](m2-n0-test.md). Profil `normal` memakai console USB native;
+profil `usb-probe` memakai COM/UART. Keduanya berisi BLE.
 
 ## Toolchain
 
@@ -41,88 +41,102 @@ Script aktivasi menerapkannya khusus target GNU lokal; build MSVC tidak diubah.
 
 ## Build dan cek
 
+Dari root, setelah `. .\scripts\activate-local.ps1`:
+
 ```powershell
-cd firmware
-idf.py set-target esp32s3
-idf.py build
-idf.py size
-cd ../companion
+.\scripts\test-host.ps1                      # tes C host + 57 vector protokol bersama
+.\scripts\build-firmware.ps1 -Profile normal
+.\scripts\build-firmware.ps1 -Profile usb-probe
+cd companion
 cargo build --workspace --locked
-cargo run -p companion-cli -- --help
-cargo run -p companion-cli -- --version
+cargo test --workspace --locked               # codec Rust pada vector yang sama
 ```
 
 Perubahan `sdkconfig.defaults` tidak menimpa nilai dalam `sdkconfig` yang sudah
-ada. Gunakan `idf.py set-target esp32s3` untuk regenerasi (konfigurasi lama menjadi
-sdkconfig.old), kemudian build ulang. Gunakan `menuconfig` untuk eksperimen lokal.
+ada. `firmware/sdkconfig` dan `firmware/sdkconfig.usb-probe` adalah file turunan
+yang diabaikan Git: hapus keduanya agar dibuat ulang dari defaults (wajib setelah
+M3 menambahkan BLE). Gunakan `menuconfig` hanya untuk eksperimen lokal.
+`build-firmware.ps1` aman di-redirect (`| Tee-Object log.txt`); kegagalan dicek
+lewat exit code idf.py.
 
-Tes C host untuk pemformat waktu, dari root dengan Clang/GCC tersedia:
-
-```powershell
-clang -std=c11 -Wall -Wextra -Werror -I firmware/main firmware/tests/test_time_utils.c firmware/main/util/time_utils.c -o .tools/test-time.exe
-.\.tools\test-time.exe
-```
+Vector protokol dibuat ulang dengan `python scripts/gen-protocol-vectors.py
+docs/protocol-test-vectors`; CI membandingkan hasilnya dengan isi repo.
 
 CLI menerima `--help` dan `--version`. `media`, `devices`, `connect`, dan `monitor`
-sengaja menghasilkan exit code 2 pada M0/M1 agar tidak mengesankan fitur selesai.
+sengaja menghasilkan exit code 2 sampai M5/M6 agar tidak mengesankan fitur selesai.
 
 ## Preview UI di komputer
 
 `firmware/tests/preview` menggunakan **ui.c yang sama** dengan firmware dan
 LVGL 9.5.0. Ini renderer tanpa jendela yang menghasilkan gambar PPM 240×240,
 bukan simulator koneksi, driver panel, PSRAM, atau timing SPI. Jalankan sesudah
-Component Manager mengunduh dependency firmware, dengan GCC/G++ dan Ninja tersedia:
+build firmware (butuh `firmware/build/config`), dengan GCC/G++ dan Ninja tersedia:
 
 ```powershell
 cmake -S firmware/tests/preview -B .tools/preview-build -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_BUILD_TYPE=Release
 cmake --build .tools/preview-build -j 6
-.\.tools\preview-build\ui-preview.exe .tools/m1-preview.ppm
-.\.tools\preview-build\ui-preview.exe .tools/long-text.ppm long-text
-.\.tools\preview-build\ui-preview.exe .tools/zero-duration.ppm zero-duration
+.\.tools\preview-build\ui-preview.exe .tools/preview-playing.ppm
+.\.tools\preview-build\ui-preview.exe .tools/preview-waiting.ppm waiting
 ```
 
-PPM dapat dibuka dengan viewer yang mendukungnya atau dikonversi ke PNG. Warna
-hasil render tidak membuktikan RGB order/inversion panel fisik sudah cocok.
-Harness membaca dimensi dari `board_config.h` dan gagal bila widget keluar dari
-batas layar. Skenario tambahan memeriksa teks maksimum, muted/paused, dan durasi nol.
+Skenario: tanpa argumen (playing), `long-text`, `zero-duration`, `waiting`,
+`no-media`, `mismatch`. Harness membaca dimensi dari `board_config.h` dan gagal
+bila widget keluar dari batas layar. Folder build preview menyimpan path absolut;
+hapus `.tools/preview-build` bila folder proyek dipindah atau diganti nama.
+Warna render tidak membuktikan RGB order/inversion panel fisik.
 
-## Flash dan uji M1
+![Layar M3/M4 dari renderer host](m4-screens.png)
 
-1. Cocokkan wiring dan nilai di [hardware.md](hardware.md).
-2. Sambungkan USB **native** dengan kabel data. Tentukan port:
+## Flash dan uji M3/M4
+
+1. Wiring sesuai [wiring.md](wiring.md). HDD/USB-A tidak diperlukan.
+2. Flash. Build `normal` dapat di-flash lewat port COM maupun USB native; log
+   aplikasinya keluar di USB native. Ganti `COMx` dengan port aktual:
 
 ```powershell
-[System.IO.Ports.SerialPort]::GetPortNames()
+idf.py -C firmware -B firmware/build -p COMx flash
 ```
 
-3. Dari folder firmware, ganti `COMx` dengan port yang ditemukan:
+3. Layar harus menampilkan `BLUETOOTH`, `Waiting for computer...`, `Terra`, status `OFF`.
+4. Siapkan harness BLE sekali (Python 3.12, Bluetooth laptop aktif):
 
 ```powershell
-idf.py -p COMx flash monitor
+python -m venv .tools/ble-test-venv
+.\.tools\ble-test-venv\Scripts\python -m pip install -r scripts/ble-test-requirements.txt
 ```
 
-Jika auto-download gagal, tahan BOOT, tekan-lepas RESET, lalu lepas BOOT dan ulangi.
-Keluar monitor dengan `Ctrl+]`. Tidak ada perintah flash otomatis saat build.
+5. Jalankan uji penerimaan; `--mtu 23` memaksa fragmentasi kecil:
 
-Keluaran yang diharapkan (timestamp dan pesan driver dapat berbeda):
+```powershell
+.\.tools\ble-test-venv\Scripts\python scripts/ble-test.py scan
+.\.tools\ble-test-venv\Scripts\python scripts/ble-test.py test --hold 20
+.\.tools\ble-test-venv\Scripts\python scripts/ble-test.py --mtu 23 test
+```
+
+Keluaran yang diharapkan diakhiri `ALL CHECKS PASSED`, meliputi discover, connect,
+service dan tiga karakteristik, HELLO → HELLO_ACK → READY, tulis RX, ERROR untuk
+payload rusak/versi asing/tipe salah, perangkat tetap READY, dan MEDIA_STATE
+maksimum 361 byte direassembly. Selama `--hold`, layar menampilkan `SPOTIFY`,
+`The Less I Know The Better`, `Tame Impala`, `VOL 72`, timeline berjalan; separuh
+waktu kemudian `Paused`, `02:00 / 03:36`, `MUTED`. Setelah disconnect layar kembali
+ke `Waiting for computer...`.
+
+Log aplikasi (USB native atau UART pada `usb-probe`) yang diharapkan saat uji:
 
 ```text
-I (APP) Terra 0.1.0 - M1 display bring-up
-I (APP) PSRAM detected: 8388608 bytes
-I (DISPLAY) ST7789 initialized (240x240, gap 0/0)
-I (LVGL) Display registered
-I (APP) Mock screen ready
+I (BLE) Advertising as Terra
+I (BLE) Client connected
+I (BLE) MTU 247
+I (PROTOCOL) HELLO protocol=1 firmware=0.2.0
+I (PROTOCOL) HELLO_ACK protocol=1 companion=0.1.0
+I (STATE) Volume 72
+I (STATE) Track changed: The Less I Know The Better - Tame Impala (Spotify)
+W (PROTOCOL) Rejected type 0x10 seq 3 (error 2)
+I (BLE) Client disconnected (reason=0x...)
 ```
 
-Layar harus menunjukkan `DEMO`, status `OFF`, `Test Song`, `Test Artist`,
-progress sepertiga, `01:00 / 03:00`, `Playing`, dan `VOL 72`. Posisi tetap selama
-setidaknya 60 detik. Periksa semua teks terbaca, tidak terpotong, tidak berkedip,
-background gelap, teks terang, dan bar biru muda. Restart board dan ulangi.
-
-Laporkan log reset lengkap, foto layar, model board/LCD, serta perubahan konfigurasi.
-PSRAM gagal berarti konfigurasi board perlu diperiksa dahulu. Layar kosong dengan
-log sukses belum membuktikan driver cocok: cek suplai, backlight, CS/DC, gap,
-inversion, dan orientasi. Turunkan SPI clock bila gambar rusak/intermiten.
+`send` mengirim metadata pilihan sendiri, misalnya
+`scripts/ble-test.py send --title "Judul" --artist "Artis" --paused --hold 60`.
 
 ## Referensi API
 

@@ -1,0 +1,14 @@
+{
+  "name": "hello_ack_accepted",
+  "kind": "hello_ack",
+  "expect": "ok",
+  "note": "",
+  "bytes": "0100010000",
+  "fields": [
+    1,
+    0,
+    1,
+    0,
+    0
+  ]
+}

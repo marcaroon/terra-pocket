@@ -1,0 +1,8 @@
+{
+  "name": "media_state_short",
+  "kind": "media_state",
+  "expect": "malformed",
+  "note": "shorter than fixed header",
+  "bytes": "01303d0100c04b0300071a0b",
+  "fields": []
+}

@@ -1,0 +1,8 @@
+{
+  "name": "command_play_with_value",
+  "kind": "media_command",
+  "expect": "malformed",
+  "note": "value must be 0",
+  "bytes": "010500",
+  "fields": []
+}

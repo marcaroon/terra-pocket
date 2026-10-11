@@ -1,0 +1,16 @@
+{
+  "name": "media_state_position_over_duration",
+  "kind": "media_state",
+  "expect": "ok",
+  "note": "legal on the wire; receivers clamp for display",
+  "bytes": "0188130000b80b00000704000042726f77736572436c6970",
+  "fields": [
+    1,
+    5000,
+    3000,
+    "42726f77736572",
+    "436c6970",
+    "-",
+    "-"
+  ]
+}

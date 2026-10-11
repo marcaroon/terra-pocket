@@ -1,0 +1,13 @@
+{
+  "name": "fragment_empty_payload",
+  "kind": "fragment",
+  "expect": "ok",
+  "note": "header-only START|END packet",
+  "bytes": "040001400300",
+  "fields": [
+    64,
+    0,
+    23,
+    "-"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "command_play_pause",
+  "kind": "media_command",
+  "expect": "ok",
+  "note": "",
+  "bytes": "010000",
+  "fields": [
+    1,
+    0
+  ]
+}

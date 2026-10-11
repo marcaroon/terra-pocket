@@ -3,36 +3,44 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "esp_err.h"
+#include "protocol/protocol.h"
 
+/* Link state and playback are deliberately separate enums (spec section 30). */
 typedef enum {
-    CONNECTION_BOOT,
-    CONNECTION_DISCONNECTED,
-    CONNECTION_CONNECTED,
-    CONNECTION_READY,
-} connection_state_t;
+    LINK_BOOT,
+    LINK_ADVERTISING,
+    LINK_CONNECTED,
+    LINK_READY,
+    LINK_PROTOCOL_MISMATCH,
+} link_state_t;
 
+/* Values match the MEDIA_STATE wire encoding. */
 typedef enum {
-    PLAYBACK_STOPPED,
-    PLAYBACK_PLAYING,
-    PLAYBACK_PAUSED,
+    PLAYBACK_NO_MEDIA = PROTOCOL_PLAYBACK_NO_MEDIA,
+    PLAYBACK_PLAYING = PROTOCOL_PLAYBACK_PLAYING,
+    PLAYBACK_PAUSED = PROTOCOL_PLAYBACK_PAUSED,
 } playback_state_t;
 
 typedef struct {
-    connection_state_t connection;
-    bool demo;
-    char source[32];
-    char title[128];
-    char artist[96];
-    char album[96];
-    uint32_t position_ms;
-    uint32_t duration_ms;
-    uint8_t volume;
+    link_state_t link;
     playback_state_t playback;
+    char source[PROTOCOL_SOURCE_MAX + 1];
+    char title[PROTOCOL_TITLE_MAX + 1];
+    char artist[PROTOCOL_ARTIST_MAX + 1];
+    char album[PROTOCOL_ALBUM_MAX + 1];
+    uint32_t position_ms;   /* base position at last_sync_ms */
+    uint32_t duration_ms;
+    uint32_t last_sync_ms;  /* monotonic ms when position_ms was received */
+    bool volume_known;
+    uint8_t volume;
     bool muted;
-    uint64_t last_sync_ms;
 } media_state_t;
 
 esp_err_t app_state_init(void);
-/* Deliberate M1 fixture; no live media/connection is implied. */
-void app_state_load_mock(void);
 void app_state_snapshot(media_state_t *out);
+
+/* Changing the link clears media and volume unless the new state is READY,
+ * so a reconnect never shows stale metadata. */
+void app_state_set_link(link_state_t link);
+void app_state_apply_media(const protocol_media_state_t *media, uint32_t now_ms);
+void app_state_apply_volume(const protocol_volume_t *volume);

@@ -1,0 +1,8 @@
+{
+  "name": "volume_muted_2",
+  "kind": "volume_state",
+  "expect": "malformed",
+  "note": "muted not 0/1",
+  "bytes": "0a02",
+  "fields": []
+}

@@ -1,0 +1,10 @@
+{
+  "name": "stream_mismatch_seq",
+  "kind": "stream",
+  "expect": "ok",
+  "note": "",
+  "bytes": "060000000000011001016162060005000000011002026364",
+  "fields": [
+    "-/-;MISMATCH/-"
+  ]
+}

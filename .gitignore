@@ -11,3 +11,4 @@ companion/app/node_modules/
 companion/app/dist/
 *.log
 .DS_Store
+__pycache__/

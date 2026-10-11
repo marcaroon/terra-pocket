@@ -1,0 +1,8 @@
+{
+  "name": "media_state_overlong_utf8",
+  "kind": "media_state",
+  "expect": "malformed",
+  "note": "overlong '/'",
+  "bytes": "01010000000200000000020000c0af",
+  "fields": []
+}

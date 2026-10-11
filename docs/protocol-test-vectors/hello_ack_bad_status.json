@@ -1,0 +1,8 @@
+{
+  "name": "hello_ack_bad_status",
+  "kind": "hello_ack",
+  "expect": "malformed",
+  "note": "status 2",
+  "bytes": "0100010002",
+  "fields": []
+}

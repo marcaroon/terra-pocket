@@ -1,0 +1,14 @@
+{
+  "name": "hello_basic",
+  "kind": "hello",
+  "expect": "ok",
+  "note": "",
+  "bytes": "010002000300",
+  "fields": [
+    1,
+    0,
+    2,
+    0,
+    3
+  ]
+}

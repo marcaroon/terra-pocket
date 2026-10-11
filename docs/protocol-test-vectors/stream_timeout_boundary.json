@@ -1,0 +1,10 @@
+{
+  "name": "stream_timeout_boundary",
+  "kind": "stream",
+  "expect": "ok",
+  "note": "exactly 1000 ms is kept",
+  "bytes": "05000000000001110103050500e80300000111020300",
+  "fields": [
+    "-/-;-/11:03:0500"
+  ]
+}

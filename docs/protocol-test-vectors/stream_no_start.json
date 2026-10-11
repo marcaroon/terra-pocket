@@ -1,0 +1,10 @@
+{
+  "name": "stream_no_start",
+  "kind": "stream",
+  "expect": "ok",
+  "note": "",
+  "bytes": "1400000000000110000574696679546865204c6573732049204b",
+  "fields": [
+    "NO_START/-"
+  ]
+}

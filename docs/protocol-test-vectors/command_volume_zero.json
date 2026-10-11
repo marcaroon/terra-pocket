@@ -1,0 +1,8 @@
+{
+  "name": "command_volume_zero",
+  "kind": "media_command",
+  "expect": "malformed",
+  "note": "zero delta",
+  "bytes": "040000",
+  "fields": []
+}

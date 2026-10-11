@@ -29,7 +29,7 @@ jobs:
           # The container user differs from the checkout owner; allow git to read it.
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git diff --exit-code -- dependencies.lock
-      - name: Test time formatting on host
+      - name: Host unit tests and shared protocol vectors
         run: |
           cc -std=c11 -Wall -Wextra -Werror -I firmware/main firmware/tests/test_time_utils.c firmware/main/util/time_utils.c -o /tmp/test-time
           /tmp/test-time
@@ -37,6 +37,12 @@ jobs:
           /tmp/test-input
           cc -std=c11 -Wall -Wextra -Werror -I firmware/main firmware/tests/test_disk_inspect.c firmware/main/storage/disk_inspect.c -o /tmp/test-disk
           /tmp/test-disk
+          cc -std=c11 -Wall -Wextra -Werror -I firmware/main firmware/tests/test_protocol.c firmware/main/protocol/protocol.c -o /tmp/test-protocol
+          /tmp/test-protocol docs/protocol-test-vectors
+      - name: Protocol vectors match the Python reference
+        run: |
+          python3 scripts/gen-protocol-vectors.py /tmp/vectors
+          diff -r /tmp/vectors docs/protocol-test-vectors
       - uses: actions/upload-artifact@v4
         with:
           name: esp32s3-firmware-${{ matrix.profile }}
@@ -54,6 +60,8 @@ jobs:
       - uses: actions/checkout@v5
       - name: Build workspace
         run: cargo build --workspace --locked
+      - name: Test workspace (shared protocol vectors)
+        run: cargo test --workspace --locked
       - name: Smoke test CLI
         shell: pwsh
         run: |

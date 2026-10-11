@@ -1,0 +1,8 @@
+{
+  "name": "hello_short",
+  "kind": "hello",
+  "expect": "malformed",
+  "note": "five bytes",
+  "bytes": "0100020003",
+  "fields": []
+}

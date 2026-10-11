@@ -1,0 +1,8 @@
+{
+  "name": "volume_short",
+  "kind": "volume_state",
+  "expect": "malformed",
+  "note": "one byte",
+  "bytes": "0a",
+  "fields": []
+}

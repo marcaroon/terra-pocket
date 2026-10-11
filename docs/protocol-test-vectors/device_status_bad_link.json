@@ -1,0 +1,8 @@
+{
+  "name": "device_status_bad_link",
+  "kind": "device_status",
+  "expect": "malformed",
+  "note": "link state 4",
+  "bytes": "0100020004000000",
+  "fields": []
+}

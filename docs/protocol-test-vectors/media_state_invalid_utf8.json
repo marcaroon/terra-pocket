@@ -1,0 +1,8 @@
+{
+  "name": "media_state_invalid_utf8",
+  "kind": "media_state",
+  "expect": "malformed",
+  "note": "bad continuation",
+  "bytes": "01010000000200000000020000c328",
+  "fields": []
+}

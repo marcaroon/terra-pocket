@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased — 2026-10-11
+## 0.2.0 — 2026-10-12 (M3 BLE GATT + M4 protokol)
+
+- Firmware 0.2.0: NimBLE peripheral `Terra` dengan service 6F3A0001 dan karakteristik
+  RX (write/write without response), TX (notify), DEVICE STATUS (read/notify); MTU 247.
+- Protokol V1 dikunci di `docs/ble-protocol.md`: sequence per pesan, timeout
+  reassembly 1000 ms, batas 512 byte, HELLO saat TX di-subscribe, payload HELLO_ACK,
+  ERROR, DEVICE_STATUS; ACK_REQUEST dicadangkan.
+- Codec C murni (`firmware/main/protocol/`), crate Rust `protocol`, dan referensi
+  Python dengan 57 test vector bersama; CI menjalankan C, Rust, dan diff generator.
+- Task `ble_transport` memiliki reassembler dan handshake; data rusak dibuang,
+  dihitung di `rx_errors`, dan dijawab ERROR tanpa reboot.
+- UI dibuat sekali dan diperbarui timer LVGL 200 ms dari salinan state: layar
+  Waiting / Connecting / Nothing Playing / Now Playing / Protocol mismatch, timeline
+  lokal, `--:--` untuk durasi 0. Fixture DEMO M1 dihapus dari boot.
+- `scripts/ble-test.py` (bleak) untuk uji penerimaan M3/M4 dari laptop.
+- `build-firmware.ps1` tidak lagi gagal saat output di-redirect; CI memakai
+  `safe.directory` di container ESP-IDF dan `actions/checkout@v5`.
+
+## 0.1.0 — 2026-10-11
 
 - Uji hardware pertama: perbaikan stack overflow task main saat render LVGL
   (stack 8 KB), decoder encoder half-step (`BOARD_ENCODER_HALF_STEP`), pemindai

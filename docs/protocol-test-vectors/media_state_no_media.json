@@ -1,0 +1,16 @@
+{
+  "name": "media_state_no_media",
+  "kind": "media_state",
+  "expect": "ok",
+  "note": "empty strings, duration 0",
+  "bytes": "00000000000000000000000000",
+  "fields": [
+    0,
+    0,
+    0,
+    "-",
+    "-",
+    "-",
+    "-"
+  ]
+}

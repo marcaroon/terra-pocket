@@ -1,0 +1,16 @@
+{
+  "name": "device_status_ready",
+  "kind": "device_status",
+  "expect": "ok",
+  "note": "",
+  "bytes": "0100020002000300",
+  "fields": [
+    1,
+    0,
+    2,
+    0,
+    2,
+    0,
+    3
+  ]
+}

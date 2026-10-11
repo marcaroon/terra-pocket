@@ -5,3 +5,7 @@
 *.yml text eol=lf
 *.toml text eol=lf
 *.bin binary
+*.tsv text eol=lf
+*.json text eol=lf
+*.rs text eol=lf
+*.py text eol=lf

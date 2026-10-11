@@ -5,6 +5,7 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lvgl_port.h"
+#include "esp_timer.h"
 
 static const char *TAG = "DISPLAY";
 static lv_display_t *display;
@@ -79,14 +80,31 @@ esp_err_t display_init(void)
     return ESP_OK;
 }
 
-esp_err_t display_render(const media_state_t *state)
+static uint32_t now_ms(void)
 {
-    ESP_RETURN_ON_FALSE(display != NULL && state != NULL, ESP_ERR_INVALID_STATE,
-                        TAG, "Display/state not initialized");
+    return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+/* Runs inside the LVGL task with the LVGL lock held. Reads a copy of app_state;
+ * BLE never touches widgets (spec section 7). */
+static void refresh(lv_timer_t *timer)
+{
+    (void)timer;
+    media_state_t snapshot;
+    app_state_snapshot(&snapshot);
+    ui_update(&snapshot, now_ms());
+}
+
+esp_err_t display_start_ui(void)
+{
+    ESP_RETURN_ON_FALSE(display != NULL, ESP_ERR_INVALID_STATE, TAG, "Display not initialized");
     ESP_RETURN_ON_FALSE(lvgl_port_lock(1000), ESP_ERR_TIMEOUT, TAG, "LVGL lock");
-    ui_render(lv_display_get_screen_active(display), state);
+    ui_create(lv_display_get_screen_active(display));
+    refresh(NULL);
     /* Flush before enabling the backlight, avoiding an uninitialized frame. */
     lv_refr_now(display);
+    lv_timer_t *timer = lv_timer_create(refresh, BOARD_UI_REFRESH_MS, NULL);
     lvgl_port_unlock();
+    ESP_RETURN_ON_FALSE(timer != NULL, ESP_ERR_NO_MEM, TAG, "UI timer");
     return gpio_set_level(BOARD_LCD_BL, BOARD_LCD_BL_ON_LEVEL);
 }

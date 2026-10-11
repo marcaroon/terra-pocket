@@ -1,0 +1,8 @@
+{
+  "name": "media_state_truncated",
+  "kind": "media_state",
+  "expect": "malformed",
+  "note": "one byte short",
+  "bytes": "01303d0100c04b0300071a0b0853706f74696679546865204c6573732049204b6e6f77205468652042657474657254616d6520496d70616c6143757272656e74",
+  "fields": []
+}

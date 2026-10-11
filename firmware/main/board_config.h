@@ -31,6 +31,8 @@
 #define BOARD_LCD_MIRROR_Y       false
 #define BOARD_LCD_SWAP_BYTES     true
 #define BOARD_LCD_DRAW_LINES     40
+/* Period of the LVGL timer that mirrors app_state onto the UI (local timeline). */
+#define BOARD_UI_REFRESH_MS      200
 #define BOARD_EXPECTED_PSRAM     (8 * 1024 * 1024)
 
 /* Active-low switches to GND; encoder common to GND, contacts pulled to 3V3. */

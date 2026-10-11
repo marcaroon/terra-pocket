@@ -22,6 +22,11 @@ Label HDD 5 V 0,55 A; datasheet WD menyatakan arus puncak 1 A. Rancangan suplai
 Cloudflare Workers + Durable Objects Free dibahas untuk relay dengan kuota;
 Vercel tetap opsi frontend. Tidak ada layanan relay yang diaktifkan.
 
+Amendment 12 Oktober 2026: M3/M4 diimplementasikan. Keputusan protokol yang
+sebelumnya terbuka (sequence, reassembly, ERROR, HELLO_ACK, DEVICE_STATUS, waktu
+HELLO) ditetapkan di `docs/ble-protocol.md`, yang kini menjadi spesifikasi wire
+format kanonik dan memperinci bagian 11–17 tanpa mengubahnya.
+
 ## 1. Project Objective
 
 Bangun sebuah perangkat desktop berbasis ESP32-S3 yang berfungsi sebagai:

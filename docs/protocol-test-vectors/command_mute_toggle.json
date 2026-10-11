@@ -1,0 +1,11 @@
+{
+  "name": "command_mute_toggle",
+  "kind": "media_command",
+  "expect": "ok",
+  "note": "",
+  "bytes": "050000",
+  "fields": [
+    5,
+    0
+  ]
+}

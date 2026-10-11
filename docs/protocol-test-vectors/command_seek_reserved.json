@@ -1,0 +1,8 @@
+{
+  "name": "command_seek_reserved",
+  "kind": "media_command",
+  "expect": "malformed",
+  "note": "SEEK_DELTA reserved in V1",
+  "bytes": "06e803",
+  "fields": []
+}

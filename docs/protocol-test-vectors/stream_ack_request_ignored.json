@@ -1,0 +1,10 @@
+{
+  "name": "stream_ack_request_ignored",
+  "kind": "stream",
+  "expect": "ok",
+  "note": "",
+  "bytes": "060000000000011107041000",
+  "fields": [
+    "-/11:04:1000"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "hello_bad_caps",
+  "kind": "hello",
+  "expect": "malformed",
+  "note": "unknown capability bit",
+  "bytes": "010002000800",
+  "fields": []
+}

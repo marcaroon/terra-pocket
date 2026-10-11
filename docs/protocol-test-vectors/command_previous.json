@@ -1,0 +1,11 @@
+{
+  "name": "command_previous",
+  "kind": "media_command",
+  "expect": "ok",
+  "note": "",
+  "bytes": "030000",
+  "fields": [
+    3,
+    0
+  ]
+}

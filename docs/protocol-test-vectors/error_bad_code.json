@@ -1,0 +1,8 @@
+{
+  "name": "error_bad_code",
+  "kind": "error",
+  "expect": "malformed",
+  "note": "code 0",
+  "bytes": "001001",
+  "fields": []
+}

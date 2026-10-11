@@ -1,0 +1,10 @@
+{
+  "name": "stream_bad_packets",
+  "kind": "stream",
+  "expect": "ok",
+  "note": "",
+  "bytes": "03000000000001100304000100000001100b01060002000000011103022801",
+  "fields": [
+    "BAD_PACKET/-;BAD_PACKET/-;-/11:02:2801"
+  ]
+}

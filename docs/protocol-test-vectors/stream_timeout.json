@@ -1,0 +1,10 @@
+{
+  "name": "stream_timeout",
+  "kind": "stream",
+  "expect": "ok",
+  "note": "gap over 1000 ms drops the partial message",
+  "bytes": "1400000000000110010501303d0100c04b0300071a0b0853706f1400dc0500000110000574696679546865204c6573732049204b060040060000011103022801",
+  "fields": [
+    "-/-;TIMEOUT+NO_START/-;-/11:02:2801"
+  ]
+}

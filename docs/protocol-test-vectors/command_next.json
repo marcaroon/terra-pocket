@@ -1,0 +1,11 @@
+{
+  "name": "command_next",
+  "kind": "media_command",
+  "expect": "ok",
+  "note": "",
+  "bytes": "020000",
+  "fields": [
+    2,
+    0
+  ]
+}

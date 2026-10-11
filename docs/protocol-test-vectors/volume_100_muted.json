@@ -1,0 +1,11 @@
+{
+  "name": "volume_100_muted",
+  "kind": "volume_state",
+  "expect": "ok",
+  "note": "",
+  "bytes": "6401",
+  "fields": [
+    100,
+    1
+  ]
+}

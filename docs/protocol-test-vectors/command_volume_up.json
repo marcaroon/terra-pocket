@@ -1,0 +1,11 @@
+{
+  "name": "command_volume_up",
+  "kind": "media_command",
+  "expect": "ok",
+  "note": "",
+  "bytes": "040200",
+  "fields": [
+    4,
+    2
+  ]
+}

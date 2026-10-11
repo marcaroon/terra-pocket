@@ -1,0 +1,10 @@
+{
+  "name": "stream_missing_end",
+  "kind": "stream",
+  "expect": "ok",
+  "note": "new START discards the unfinished message",
+  "bytes": "1400000000000110010501303d0100c04b0300071a0b0853706f14000a0000000110000574696679546865204c6573732049204b060014000000011103022801",
+  "fields": [
+    "-/-;-/-;INCOMPLETE/11:02:2801"
+  ]
+}

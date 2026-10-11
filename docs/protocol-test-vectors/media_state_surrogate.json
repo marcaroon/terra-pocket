@@ -1,0 +1,8 @@
+{
+  "name": "media_state_surrogate",
+  "kind": "media_state",
+  "expect": "malformed",
+  "note": "UTF-16 surrogate",
+  "bytes": "01010000000200000000030000eda080",
+  "fields": []
+}

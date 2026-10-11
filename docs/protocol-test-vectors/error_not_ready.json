@@ -1,0 +1,12 @@
+{
+  "name": "error_not_ready",
+  "kind": "error",
+  "expect": "ok",
+  "note": "",
+  "bytes": "051007",
+  "fields": [
+    5,
+    16,
+    7
+  ]
+}
