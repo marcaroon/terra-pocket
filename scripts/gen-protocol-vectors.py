@@ -26,7 +26,7 @@ def emit(name, kind, expect, data, args=(), note=""):
     description = {"name": name, "kind": kind, "expect": expect, "note": note,
                    "bytes": data.hex(), "fields": list(args)}
     (out / f"{name}.json").write_text(json.dumps(description, indent=2, ensure_ascii=False) + "\n",
-                                      encoding="utf-8")
+                                      encoding="utf-8", newline="\n")
     rows.append("\t".join([name, kind, expect, *map(str, args)]))
 
 
