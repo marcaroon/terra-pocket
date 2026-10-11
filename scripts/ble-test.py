@@ -224,6 +224,7 @@ async def cmd_send(args) -> int:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(line_buffering=True)  # keep logs live when redirected
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--timeout", type=float, default=10.0, help="scan timeout in seconds")
     parser.add_argument("--mtu", type=int, default=0, help="fragment as if the ATT MTU were this (e.g. 23)")
