@@ -140,6 +140,36 @@ I (BLE) Client disconnected (reason=0x...)
 `send` mengirim metadata pilihan sendiri, misalnya
 `scripts/ble-test.py send --title "Judul" --artist "Artis" --paused --hold 60`.
 
+## Uji M6 (companion Rust)
+
+1. Putar lagu di Spotify, YouTube, atau pemutar lain yang muncul di kontrol media
+   Windows (overlay volume menampilkan judulnya).
+2. Dari folder `companion`:
+
+```powershell
+cargo build --workspace --locked
+.\target\debug\terra-cli.exe devices
+.\target\debug\terra-cli.exe connect
+```
+
+Keluaran yang diharapkan:
+
+```text
+[BLE] scanning for Terra
+[BLE] found Terra 28:84:85:48:15:BA RSSI -33 dBm
+[BLE] connected, packet size 244 bytes
+[PROTOCOL] HELLO protocol=1 firmware=0.2.0
+[PROTOCOL] device link state Ready, rx_errors 0
+[MEDIA] Spotify - Tame Impala - The Less I Know The Better (Playing, 81.4s / 216.0s)
+```
+
+Layar Terra menampilkan source, judul, artis, dan timeline yang berjalan. Satu baris
+`[MEDIA]` baru muncul hanya saat lagu, play/pause, atau posisi (seek > 1,5 s) berubah.
+Volume masih `VOL --` sampai M8. Hentikan dengan Ctrl+C; layar kembali ke
+`Waiting for computer...`. Hanya satu central: tutup harness Python atau aplikasi
+lain yang terhubung ke Terra lebih dulu. Exit code `connect`: 0 setelah disconnect,
+1 gagal (tidak ditemukan, BLE/GATT error), 3 versi protokol tidak cocok.
+
 ## Referensi API
 
 - [esp_lvgl_port 2.9.0](https://components.espressif.com/components/espressif/esp_lvgl_port/versions/2.9.0/readme)

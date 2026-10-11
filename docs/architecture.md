@@ -36,8 +36,8 @@ dan CLI informasi versi yang berfungsi. Tidak ada dependency eksternal Rust.
 | protocol | Codec biner, fragmentasi, validasi, shared vectors (M4) |
 | media-windows | GSMTC: snapshot dan langganan perubahan (M5, berjalan); perintah media (M7) |
 | audio-windows | Core Audio volume/mute dan callback perubahan (M8) |
-| ble-windows | Windows central, GATT, handshake, reconnect (M6/M9) |
-| companion-core | Koordinator lintas domain, tidak bergantung frontend |
+| ble-windows | Windows central: scan, GattSession, discovery, notify, write (M6, berjalan); reconnect (M9) |
+| companion-core | Aturan sinkronisasi murni + sesi media→BLE (M6, berjalan); koordinator penuh di M7–M9 |
 | companion-cli | Diagnostik sebelum GUI |
 
 `windows-rs` dan Tokio akan ditambahkan saat dibutuhkan. Tauri 2, React, TypeScript

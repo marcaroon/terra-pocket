@@ -13,6 +13,7 @@ path = "src/main.rs"
 companion-core = { path = "../companion-core" }
 
 [target.'cfg(windows)'.dependencies]
+ble-windows = { path = "../ble-windows" }
 media-windows = { path = "../media-windows" }
 
 [lints]

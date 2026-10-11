@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased — M5 Windows media reader
+## Unreleased — M6 Windows BLE client
+
+- Crate `ble-windows`: scan aktif (nama/UUID service), koneksi via `GattSession`
+  dengan MaintainConnection, discovery service/karakteristik, handler TX dipasang
+  sebelum CCCD notify agar HELLO tidak hilang, tulis RX dengan response, baca STATUS,
+  deteksi disconnect.
+- `companion-core`: aturan sinkronisasi murni (pemetaan playback, potong UTF-8 di batas
+  karakter, kirim hanya saat lagu/playback/metadata berubah atau seek > 1,5 s) dan
+  sesi `run`: scan → connect → HELLO/HELLO_ACK → MEDIA_STATE setiap perubahan GSMTC.
+- `terra-cli devices` dan `terra-cli connect [ALAMAT]`; `monitor` tetap exit 2 (M7).
+- Perilaku Windows yang terukur: discovery *uncached* sebelum link aktif gagal
+  (Unreachable / 0x80070016) dan sesi tidak pernah aktif tanpa permintaan GATT;
+  karena itu discovery memakai cache default dengan retry, lalu menunggu sesi aktif.
+
+## M5 Windows media reader
 
 - Crate `media-windows` (windows-rs 0.62.2, `Windows.Media.Control`): sesi saat ini,
   source (nama tampilan Windows atau heuristik AppUserModelId), judul, artis, album,

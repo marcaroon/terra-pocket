@@ -5,8 +5,7 @@
 #![cfg(windows)]
 
 use std::fmt;
-use std::sync::mpsc::Sender;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use windows::ApplicationModel::AppInfo;
@@ -39,6 +38,8 @@ impl From<windows::core::Error> for MediaError {
 }
 
 pub type Result<T> = std::result::Result<T, MediaError>;
+
+type Notify = Arc<dyn Fn() + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Playback {
@@ -199,23 +200,24 @@ impl MediaReader {
         }
     }
 
-    /// Sends `()` on `changes` whenever the current session changes or the
-    /// current session reports new media, playback or timeline data. Events fire
-    /// on WinRT threads; call `MediaWatch::sync` after each notification so the
-    /// subscriptions follow the newly selected session.
-    pub fn watch(&self, changes: Sender<()>) -> Result<MediaWatch> {
+    /// Calls `on_change` whenever the current session changes or the current
+    /// session reports new media, playback or timeline data. It runs on WinRT
+    /// threads and should only signal; call `MediaWatch::sync` after each
+    /// notification so the subscriptions follow the newly selected session.
+    pub fn watch(&self, on_change: impl Fn() + Send + Sync + 'static) -> Result<MediaWatch> {
+        let changes: Notify = Arc::new(on_change);
         let tx = changes.clone();
         let current = self.manager.CurrentSessionChanged(&TypedEventHandler::<
             Manager,
             CurrentSessionChangedEventArgs,
         >::new(move |_, _| {
-            let _ = tx.send(());
+            tx();
             Ok(())
         }))?;
         let tx = changes.clone();
         let sessions = self.manager.SessionsChanged(&TypedEventHandler::<Manager, SessionsChangedEventArgs>::new(
             move |_, _| {
-                let _ = tx.send(());
+                tx();
                 Ok(())
             },
         ))?;
@@ -241,7 +243,7 @@ pub struct MediaWatch {
     manager: Manager,
     manager_tokens: (i64, i64),
     session: Mutex<Option<Subscribed>>,
-    changes: Sender<()>,
+    changes: Notify,
 }
 
 impl MediaWatch {
@@ -274,21 +276,21 @@ impl MediaWatch {
         let tx = self.changes.clone();
         let media = session.MediaPropertiesChanged(
             &TypedEventHandler::<Session, MediaPropertiesChangedEventArgs>::new(move |_, _| {
-                let _ = tx.send(());
+                tx();
                 Ok(())
             }),
         )?;
         let tx = self.changes.clone();
         let playback = session.PlaybackInfoChanged(
             &TypedEventHandler::<Session, PlaybackInfoChangedEventArgs>::new(move |_, _| {
-                let _ = tx.send(());
+                tx();
                 Ok(())
             }),
         )?;
         let tx = self.changes.clone();
         let timeline = session.TimelinePropertiesChanged(
             &TypedEventHandler::<Session, TimelinePropertiesChangedEventArgs>::new(move |_, _| {
-                let _ = tx.send(());
+                tx();
                 Ok(())
             }),
         )?;

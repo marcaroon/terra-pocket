@@ -1,5 +1,23 @@
 # Laporan validasi
 
+## M6 — 12 Oktober 2026
+
+**Software tested:** `cargo test --workspace` lulus (aturan sinkronisasi, pemotongan
+UTF-8, parsing alamat, UUID). **Hardware tested** (laptop pengguna ↔ board di meja):
+`terra-cli devices` menemukan `28:84:85:48:15:BA` RSSI −33 dBm. `terra-cli connect`:
+connect, paket 244 byte, HELLO protocol 1 firmware 0.2.0, status READY. Dengan sesi
+media uji (audio senyap di browser pane, source `Claude`), companion mengirim tepat
+enam MEDIA_STATE: nothing playing, playing 81,4 s, paused, playing, ganti lagu, seek
+150,2 s; tidak ada pengiriman posisi berkala. Log perangkat: `Track changed` untuk
+kedua lagu, tanpa paket ditolak; disconnect bersih saat companion dihentikan.
+
+**Percobaan gagal yang dicatat:** discovery *uncached* sebelum link aktif → GATT
+Unreachable, lalu HRESULT 0x80070016; menunggu sesi aktif sebelum discovery tidak
+pernah selesai. Diperbaiki dengan urutan discovery-lalu-tunggu-sesi seperti bleak.
+
+**Belum diverifikasi:** konfirmasi visual layar oleh pengguna, Spotify/YouTube nyata,
+koneksi lama (> 1 menit), Bluetooth laptop off/on, sleep/wake (M9).
+
 ## M5 — 12 Oktober 2026
 
 **Software tested:** `cargo test --workspace` lulus (estimasi posisi, nama source,

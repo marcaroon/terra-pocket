@@ -6,10 +6,14 @@ Usage: terra-cli <command>
 Commands:
   media            Print the current Windows media session (M5)
   media --watch    Print a line whenever the track, playback or source changes
+  devices          Scan for Terra devices over Bluetooth LE (M6)
+  connect [ADDR]   Connect to Terra and mirror Windows media to its display (M6)
+                   ADDR is optional, e.g. 28:84:85:48:15:BA; default: strongest found
   --help, -h       Show this help
   --version, -V    Show the version
 
-devices/connect/monitor arrive with the Windows BLE client (M6).";
+monitor arrives with device commands (M7). The link is not re-established
+automatically after a disconnect yet (M9).";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -25,8 +29,17 @@ fn main() -> ExitCode {
         }
         ["media"] => media::print_current(),
         ["media", "--watch"] => media::watch(),
-        ["devices" | "connect" | "monitor", ..] => {
-            eprintln!("Command not available yet: arrives with the Windows BLE client (M6).");
+        ["devices"] => ble::devices(),
+        ["connect"] => ble::connect(None),
+        ["connect", address] => match ble::parse_address(address) {
+            Some(address) => ble::connect(Some(address)),
+            None => {
+                eprintln!("Invalid address {address}; expected AA:BB:CC:DD:EE:FF.");
+                ExitCode::from(2)
+            }
+        },
+        ["monitor", ..] => {
+            eprintln!("Command not available yet: arrives with device commands (M7).");
             ExitCode::from(2)
         }
         _ => {
@@ -127,7 +140,10 @@ mod media {
             Err(code) => return code,
         };
         let (tx, rx) = mpsc::channel();
-        let watch = match reader.watch(tx) {
+        let tx = std::sync::Mutex::new(tx);
+        let watch = match reader.watch(move || {
+            let _ = tx.lock().map(|tx| tx.send(()));
+        }) {
             Ok(watch) => watch,
             Err(error) => {
                 eprintln!("Cannot subscribe to media changes: {error}");
@@ -170,6 +186,97 @@ mod media {
             last = current;
             last_at = std::time::Instant::now();
         }
+    }
+}
+
+/// Parses AA:BB:CC:DD:EE:FF into the 48-bit Bluetooth address.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn parse_address_text(text: &str) -> Option<u64> {
+    let parts: Vec<&str> = text.split(':').collect();
+    if parts.len() != 6 {
+        return None;
+    }
+    parts.iter().try_fold(0u64, |acc, part| {
+        (part.len() == 2).then_some(())?;
+        u8::from_str_radix(part, 16).ok().map(|byte| (acc << 8) | byte as u64)
+    })
+}
+
+#[cfg(windows)]
+mod ble {
+    use companion_core::session::{SessionError, SessionOptions, run};
+    use std::process::ExitCode;
+    use std::time::Duration;
+
+    pub fn parse_address(text: &str) -> Option<u64> {
+        super::parse_address_text(text)
+    }
+
+    pub fn devices() -> ExitCode {
+        println!("Scanning for Terra (8 s)...");
+        match ble_windows::scan(Duration::from_secs(8), false) {
+            Ok(found) if found.is_empty() => {
+                println!("No Terra device found.");
+                ExitCode::FAILURE
+            }
+            Ok(found) => {
+                for device in found {
+                    println!("{}  {:<8} RSSI {} dBm", device.address_text(), device.name, device.rssi);
+                }
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("Scan failed: {error}");
+                ExitCode::FAILURE
+            }
+        }
+    }
+
+    pub fn connect(address: Option<u64>) -> ExitCode {
+        let options = SessionOptions { address, scan_timeout: Duration::from_secs(10) };
+        match run(&options, |line| println!("{line}")) {
+            Ok(()) => {
+                println!("Session ended. Run `terra-cli connect` again to reconnect (automatic reconnect: M9).");
+                ExitCode::SUCCESS
+            }
+            Err(error @ SessionError::ProtocolMismatch { .. }) => {
+                eprintln!("{error}");
+                ExitCode::from(3)
+            }
+            Err(error) => {
+                eprintln!("Session failed: {error}");
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod ble {
+    use std::process::ExitCode;
+
+    pub fn parse_address(text: &str) -> Option<u64> {
+        super::parse_address_text(text)
+    }
+
+    pub fn devices() -> ExitCode {
+        eprintln!("Bluetooth LE is only implemented for Windows.");
+        ExitCode::FAILURE
+    }
+
+    pub fn connect(_: Option<u64>) -> ExitCode {
+        devices()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn address_parsing() {
+        assert_eq!(super::parse_address_text("28:84:85:48:15:BA"), Some(0x2884_8548_15BA));
+        assert_eq!(super::parse_address_text("28:84:85:48:15"), None);
+        assert_eq!(super::parse_address_text("28:84:85:48:15:GG"), None);
+        assert_eq!(super::parse_address_text("288:4:85:48:15:BA"), None);
     }
 }
 

@@ -9,11 +9,15 @@ version = "0.1.0"
 [[package]]
 name = "ble-windows"
 version = "0.1.0"
+dependencies = [
+ "windows",
+]
 
 [[package]]
 name = "companion-cli"
 version = "0.1.0"
 dependencies = [
+ "ble-windows",
  "companion-core",
  "media-windows",
 ]
@@ -21,13 +25,17 @@ dependencies = [
 [[package]]
 name = "companion-core"
 version = "0.1.0"
+dependencies = [
+ "ble-windows",
+ "media-windows",
+ "protocol",
+]
 
 [[package]]
 name = "media-windows"
 version = "0.1.0"
 dependencies = [
  "windows",
- "windows-future",
 ]
 
 [[package]]
