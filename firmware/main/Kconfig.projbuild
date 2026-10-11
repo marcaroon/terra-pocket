@@ -1,0 +1,9 @@
+menu "Terra"
+    config TERRA_USB_PROBE
+        bool "Enable read-only USB sector diagnostics (N0)"
+        default n
+        help
+            Requires UART console and verified USB host power wiring. Reads only
+            LBA0 and the first sector of up to four primary MBR partitions.
+            Does not mount FAT/NTFS, write disks, or serve files over the network.
+endmenu

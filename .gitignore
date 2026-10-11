@@ -1,0 +1,13 @@
+.tools/
+firmware/build/
+firmware/build-usb-probe/
+firmware/sdkconfig.usb-probe
+firmware/sdkconfig.usb-probe.old
+firmware/managed_components/
+firmware/sdkconfig
+firmware/sdkconfig.old
+companion/target/
+companion/app/node_modules/
+companion/app/dist/
+*.log
+.DS_Store

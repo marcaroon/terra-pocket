@@ -1,0 +1,16 @@
+[package]
+name = "companion-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "terra-cli"
+path = "src/main.rs"
+
+[dependencies]
+companion-core = { path = "../companion-core" }
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/protocol",
+    "crates/media-windows",
+    "crates/audio-windows",
+    "crates/ble-windows",
+    "crates/companion-core",
+    "crates/companion-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

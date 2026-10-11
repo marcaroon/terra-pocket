@@ -1,0 +1,8 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {defaults,validateConfig,listFiles,files} from '../dist/model.js';
+test('draft preserves allowed settings and strips unknown properties',()=>{assert.deepEqual(validateConfig({...defaults,token:'must not export'}),defaults);});
+test('Cloudflare Free remains an explicit draft choice',()=>{assert.equal(defaults.remoteMode,'undecided');assert.equal(validateConfig({...defaults,remoteMode:'cloudflare-free'}).remoteMode,'cloudflare-free');});
+test('rejects invalid settings and multibyte overflow',()=>{for(const value of [null,[],{...defaults,rotation:'45'},{...defaults,volumeStep:'0'},{...defaults,deviceName:' '},{...defaults,deviceName:'😀'.repeat(9)},{...defaults,wifiName:'a\n'},{...defaults,autoConnect:'yes'},{...defaults,filesystem:'format-now'},{...defaults,remoteMode:'public-http'}])assert.throws(()=>validateConfig(value));});
+test('search and folders remain scoped and sorting is deterministic',()=>{assert.equal(listFiles('root').length,4);assert.equal(listFiles('root','mulai')[0].id,'welcome');assert.equal(listFiles('root','wiring').length,0);assert.equal(listFiles('notes','WIRING')[0].id,'wiring');assert.equal(listFiles('root','','folder').length,3);assert.equal(listFiles('root','','file').length,1);assert.equal(listFiles('root','no-such-file').length,0);assert.equal(listFiles('root','','all','newest')[0].id,'documents');});
+test('every fixture has a unique ID and a valid parent',()=>{assert.equal(new Set(files.map(f=>f.id)).size,files.length);for(const file of files)assert.ok(file.parent==='root'||files.some(f=>f.id===file.parent&&f.type==='folder'));});

@@ -1,0 +1,64 @@
+name: Build firmware and companion
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  firmware:
+    strategy:
+      matrix:
+        profile: [normal, usb-probe]
+    runs-on: ubuntu-latest
+    container: espressif/idf:v6.0.3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ESP32-S3 firmware
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          cd firmware
+          if [ '${{ matrix.profile }}' = 'usb-probe' ]; then
+            idf.py -D SDKCONFIG_DEFAULTS='sdkconfig.defaults;sdkconfig.usb-probe.defaults' build
+          else
+            idf.py build
+          fi
+          git diff --exit-code -- dependencies.lock
+      - name: Test time formatting on host
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -I firmware/main firmware/tests/test_time_utils.c firmware/main/util/time_utils.c -o /tmp/test-time
+          /tmp/test-time
+          cc -std=c11 -Wall -Wextra -Werror -I firmware/main firmware/tests/test_input_logic.c firmware/main/input/input_logic.c -o /tmp/test-input
+          /tmp/test-input
+          cc -std=c11 -Wall -Wextra -Werror -I firmware/main firmware/tests/test_disk_inspect.c firmware/main/storage/disk_inspect.c -o /tmp/test-disk
+          /tmp/test-disk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: esp32s3-firmware-${{ matrix.profile }}
+          path: |
+            firmware/build/terra.bin
+            firmware/build/bootloader/bootloader.bin
+            firmware/build/partition_table/partition-table.bin
+            firmware/build/flasher_args.json
+  companion:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: companion
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build workspace
+        run: cargo build --workspace --locked
+      - name: Smoke test CLI
+        shell: pwsh
+        run: |
+          & ./target/debug/terra-cli.exe --version
+          if ($LASTEXITCODE -ne 0) { throw 'Version command failed' }
+          & ./target/debug/terra-cli.exe --help
+          if ($LASTEXITCODE -ne 0) { throw 'Help command failed' }
+          & ./target/debug/terra-cli.exe media
+          if ($LASTEXITCODE -ne 2) { throw 'Unimplemented command must exit 2' }
+          exit 0

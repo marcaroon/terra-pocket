@@ -1,0 +1,271 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1090" width="1240" height="1090" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">Terra — diagram wiring hardware</title>
+<desc id="d">ESP32-S3 N16R8 ke ST7789 240x240, tiga tombol, rotary encoder, dan HDD USB melalui GPIO19/20 dengan VBUS dari adaptor 5 V terpisah.</desc>
+<rect width="1240" height="1090" fill="#ffffff"/>
+<text x="24" y="36" font-size="20" text-anchor="start" fill="#202124" font-weight="bold">Terra — wiring hardware (M2 input + N0 USB probe)</text>
+<text x="24" y="58" font-size="12" text-anchor="start" fill="#5f6368" font-weight="normal">Diagram logis, bukan layout PCB. Nomor header mengikuti pinout bergaya DevKitC-1; cocokkan dengan silkscreen board YD sebelum menyolder.</text>
+<rect x="500" y="90" width="260" height="856" rx="10" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+<text x="630.0" y="114" font-size="15" text-anchor="middle" fill="#202124" font-weight="bold">ESP32-S3 N16R8</text>
+<text x="630.0" y="130" font-size="11" text-anchor="middle" fill="#5f6368" font-weight="normal">YD-ESP32-S3 2022-V1.3 (tampak atas)</text>
+<text x="508" y="106" font-size="12" text-anchor="start" fill="#1a73e8" font-weight="bold">J1</text>
+<text x="752" y="106" font-size="12" text-anchor="end" fill="#1a73e8" font-weight="bold">J3</text>
+<circle cx="500" cy="140" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="144" font-size="12" text-anchor="start" fill="#202124" font-weight="bold"> 1 3V3</text>
+<circle cx="500" cy="176" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="180" font-size="12" text-anchor="start" fill="#9aa0a6" font-weight="normal"> 2 3V3</text>
+<circle cx="500" cy="212" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="216" font-size="12" text-anchor="start" fill="#9aa0a6" font-weight="normal"> 3 RST</text>
+<circle cx="500" cy="248" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="252" font-size="12" text-anchor="start" fill="#202124" font-weight="bold"> 4 GPIO4</text>
+<circle cx="500" cy="284" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="288" font-size="12" text-anchor="start" fill="#202124" font-weight="bold"> 5 GPIO5</text>
+<circle cx="500" cy="320" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="324" font-size="12" text-anchor="start" fill="#202124" font-weight="bold"> 6 GPIO6</text>
+<circle cx="500" cy="356" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="360" font-size="12" text-anchor="start" fill="#202124" font-weight="bold"> 7 GPIO7</text>
+<circle cx="500" cy="392" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="396" font-size="12" text-anchor="start" fill="#202124" font-weight="bold"> 8 GPIO15</text>
+<circle cx="500" cy="428" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="432" font-size="12" text-anchor="start" fill="#202124" font-weight="bold"> 9 GPIO16</text>
+<circle cx="500" cy="464" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="468" font-size="12" text-anchor="start" fill="#202124" font-weight="bold">10 GPIO17</text>
+<circle cx="500" cy="500" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="504" font-size="12" text-anchor="start" fill="#9aa0a6" font-weight="normal">11 GPIO18</text>
+<circle cx="500" cy="536" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="540" font-size="12" text-anchor="start" fill="#202124" font-weight="bold">12 GPIO8</text>
+<circle cx="500" cy="572" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="576" font-size="12" text-anchor="start" fill="#b06000" font-weight="normal">13 GPIO3</text>
+<circle cx="500" cy="608" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="612" font-size="12" text-anchor="start" fill="#b06000" font-weight="normal">14 GPIO46</text>
+<circle cx="500" cy="644" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="648" font-size="12" text-anchor="start" fill="#202124" font-weight="bold">15 GPIO9</text>
+<circle cx="500" cy="680" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="684" font-size="12" text-anchor="start" fill="#9aa0a6" font-weight="normal">16 GPIO10</text>
+<circle cx="500" cy="716" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="720" font-size="12" text-anchor="start" fill="#202124" font-weight="bold">17 GPIO11</text>
+<circle cx="500" cy="752" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="756" font-size="12" text-anchor="start" fill="#202124" font-weight="bold">18 GPIO12</text>
+<circle cx="500" cy="788" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="792" font-size="12" text-anchor="start" fill="#9aa0a6" font-weight="normal">19 GPIO13</text>
+<circle cx="500" cy="824" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="828" font-size="12" text-anchor="start" fill="#9aa0a6" font-weight="normal">20 GPIO14</text>
+<circle cx="500" cy="860" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="864" font-size="12" text-anchor="start" fill="#9aa0a6" font-weight="normal">21 5V</text>
+<circle cx="500" cy="896" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="512" y="900" font-size="12" text-anchor="start" fill="#202124" font-weight="bold">22 GND</text>
+<circle cx="760" cy="140" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="144" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GND  1</text>
+<circle cx="760" cy="176" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="180" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">TX/43  2</text>
+<circle cx="760" cy="212" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="216" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">RX/44  3</text>
+<circle cx="760" cy="248" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="252" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO1  4</text>
+<circle cx="760" cy="284" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="288" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO2  5</text>
+<circle cx="760" cy="320" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="324" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO42  6</text>
+<circle cx="760" cy="356" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="360" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO41  7</text>
+<circle cx="760" cy="392" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="396" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO40  8</text>
+<circle cx="760" cy="428" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="432" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO39  9</text>
+<circle cx="760" cy="464" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="468" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO38 10</text>
+<circle cx="760" cy="500" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="504" font-size="12" text-anchor="end" fill="#b06000" font-weight="normal">GPIO37 11</text>
+<circle cx="760" cy="536" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="540" font-size="12" text-anchor="end" fill="#b06000" font-weight="normal">GPIO36 12</text>
+<circle cx="760" cy="572" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="576" font-size="12" text-anchor="end" fill="#b06000" font-weight="normal">GPIO35 13</text>
+<circle cx="760" cy="608" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="612" font-size="12" text-anchor="end" fill="#b06000" font-weight="normal">GPIO0 14</text>
+<circle cx="760" cy="644" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="648" font-size="12" text-anchor="end" fill="#b06000" font-weight="normal">GPIO45 15</text>
+<circle cx="760" cy="680" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="684" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO48 16</text>
+<circle cx="760" cy="716" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="720" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO47 17</text>
+<circle cx="760" cy="752" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="756" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GPIO21 18</text>
+<circle cx="760" cy="788" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="792" font-size="12" text-anchor="end" fill="#202124" font-weight="bold">GPIO20 19</text>
+<circle cx="760" cy="824" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="828" font-size="12" text-anchor="end" fill="#202124" font-weight="bold">GPIO19 20</text>
+<circle cx="760" cy="860" r="6" fill="#fbbc04" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="864" font-size="12" text-anchor="end" fill="#202124" font-weight="bold">GND 21</text>
+<circle cx="760" cy="896" r="6" fill="#fff" stroke="#1a73e8" stroke-width="1.5"/>
+<text x="748" y="900" font-size="12" text-anchor="end" fill="#9aa0a6" font-weight="normal">GND 22</text>
+<rect x="540" y="932" width="60" height="22" rx="6" fill="#dadce0" stroke="#5f6368"/>
+<text x="570" y="948" font-size="11" text-anchor="middle" fill="#202124" font-weight="bold">COM</text>
+<text x="570" y="970" font-size="10" text-anchor="middle" fill="#5f6368" font-weight="normal">UART bridge</text>
+<rect x="660" y="932" width="60" height="22" rx="6" fill="#dadce0" stroke="#5f6368"/>
+<text x="690" y="948" font-size="11" text-anchor="middle" fill="#202124" font-weight="bold">USB</text>
+<text x="690" y="970" font-size="10" text-anchor="middle" fill="#5f6368" font-weight="normal">native, GPIO19/20</text>
+<text x="630.0" y="926" font-size="10" text-anchor="middle" fill="#5f6368" font-weight="normal" font-style="italic">label konektor: ikuti PCB</text>
+<rect x="60" y="204" width="300" height="146" rx="8" fill="#ffffff" stroke="#5f6368" stroke-width="1.5"/>
+<text x="210.0" y="224" font-size="14" text-anchor="middle" fill="#202124" font-weight="bold">Tombol tactile 6×6 mm</text>
+<polyline points="500,248 330,248" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="330,248 259.0,248" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="231.0,248 160,248" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="259.0" cy="248" r="4" fill="#188038"/>
+<circle cx="231.0" cy="248" r="4" fill="#188038"/>
+<polyline points="229.0,238 261.0,238" fill="none" stroke="#188038" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="245.0,238 245.0,230" fill="none" stroke="#188038" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="150" y="252" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">SW1 Previous</text>
+<polyline points="500,284 330,284" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="330,284 259.0,284" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="231.0,284 160,284" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="259.0" cy="284" r="4" fill="#188038"/>
+<circle cx="231.0" cy="284" r="4" fill="#188038"/>
+<polyline points="229.0,274 261.0,274" fill="none" stroke="#188038" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="245.0,274 245.0,266" fill="none" stroke="#188038" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="150" y="288" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">SW2 Play/Pause</text>
+<polyline points="500,320 330,320" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="330,320 259.0,320" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="231.0,320 160,320" fill="none" stroke="#188038" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="259.0" cy="320" r="4" fill="#188038"/>
+<circle cx="231.0" cy="320" r="4" fill="#188038"/>
+<polyline points="229.0,310 261.0,310" fill="none" stroke="#188038" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="245.0,310 245.0,302" fill="none" stroke="#188038" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="150" y="324" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">SW3 Next</text>
+<polyline points="160,248 160,332" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="160,332 160,340" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="150,340 170,340" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="154,344 166,344" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="158,348 162,348" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="160" cy="248" r="4" fill="#202124"/>
+<circle cx="160" cy="284" r="4" fill="#202124"/>
+<circle cx="160" cy="320" r="4" fill="#202124"/>
+<polyline points="500,356 470,356" fill="none" stroke="#c5221f" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="470,356 460,346 400.6,346 400.6,366 460,366" fill="#fff" stroke="#c5221f" stroke-width="1.5"/>
+<text x="430.3" y="360" font-size="11" text-anchor="middle" fill="#c5221f" font-weight="bold">LCD BLK</text>
+<rect x="60" y="354" width="300" height="136" rx="8" fill="#ffffff" stroke="#5f6368" stroke-width="1.5"/>
+<text x="210.0" y="374" font-size="14" text-anchor="middle" fill="#202124" font-weight="bold">Rotary encoder EC11 + push</text>
+<polyline points="500,392 300,392" fill="none" stroke="#e37400" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="300" cy="392" r="4" fill="#e37400"/>
+<text x="290" y="396" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">A / CLK</text>
+<polyline points="500,428 300,428" fill="none" stroke="#e37400" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="300" cy="428" r="4" fill="#e37400"/>
+<text x="290" y="432" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">B / DT</text>
+<polyline points="500,464 300,464" fill="none" stroke="#e37400" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="300" cy="464" r="4" fill="#e37400"/>
+<text x="290" y="468" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">SW</text>
+<text x="110" y="432" font-size="11" text-anchor="start" fill="#5f6368" font-weight="normal">C (tengah) → GND</text>
+<text x="110" y="468" font-size="11" text-anchor="start" fill="#5f6368" font-weight="normal">SW' → GND</text>
+<polyline points="100,428 90,428 90,470" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="100,464 90,464" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="90,470 90,478" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="80,478 100,478" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="84,482 96,482" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="88,486 92,486" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="60" y="496" width="300" height="296" rx="8" fill="#ffffff" stroke="#5f6368" stroke-width="1.5"/>
+<text x="210.0" y="516" font-size="14" text-anchor="middle" fill="#202124" font-weight="bold">LCD ST7789 240×240 · SPI mode 3</text>
+<polyline points="500,536 300,536" fill="none" stroke="#1a73e8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="300" cy="536" r="4" fill="#1a73e8"/>
+<text x="290" y="540" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">RES / RST</text>
+<polyline points="500,644 300,644" fill="none" stroke="#1a73e8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="300" cy="644" r="4" fill="#1a73e8"/>
+<text x="290" y="648" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">DC / A0</text>
+<polyline points="500,716 300,716" fill="none" stroke="#1a73e8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="300" cy="716" r="4" fill="#1a73e8"/>
+<text x="290" y="720" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">SDA / DIN / MOSI</text>
+<polyline points="500,752 300,752" fill="none" stroke="#1a73e8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="300" cy="752" r="4" fill="#1a73e8"/>
+<text x="290" y="756" font-size="12" text-anchor="end" fill="#202124" font-weight="normal">SCL / SCK / CLK</text>
+<text x="290" y="684" font-size="11" text-anchor="end" fill="#b06000" font-weight="normal" font-style="italic">tanpa CS (7 pin) · GPIO10 kosong</text>
+<text x="110" y="576" font-size="12" text-anchor="start" fill="#202124" font-weight="normal">VCC</text>
+<polyline points="100,572 80,572" fill="none" stroke="#d93025" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="80,572 70,562 39.4,562 39.4,582 70,582" fill="#fff" stroke="#d93025" stroke-width="1.5"/>
+<text x="54.7" y="576" font-size="11" text-anchor="middle" fill="#d93025" font-weight="bold">3V3</text>
+<text x="110" y="608" font-size="12" text-anchor="start" fill="#202124" font-weight="normal">GND</text>
+<polyline points="100,604 80,604" fill="none" stroke="#202124" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="80,604 70,594 39.4,594 39.4,614 70,614" fill="#fff" stroke="#202124" stroke-width="1.5"/>
+<text x="54.7" y="608" font-size="11" text-anchor="middle" fill="#202124" font-weight="bold">GND</text>
+<text x="110" y="640" font-size="12" text-anchor="start" fill="#202124" font-weight="normal">BLK</text>
+<polyline points="100,636 80,636" fill="none" stroke="#c5221f" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="80,636 70,626 25.0,626 25.0,646 70,646" fill="#fff" stroke="#c5221f" stroke-width="1.5"/>
+<text x="47.5" y="640" font-size="11" text-anchor="middle" fill="#c5221f" font-weight="bold">GPIO7</text>
+<polyline points="500,140 430,140" fill="none" stroke="#d93025" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="430,140 420,130 317.4,130 317.4,150 420,150" fill="#fff" stroke="#d93025" stroke-width="1.5"/>
+<text x="368.7" y="144" font-size="11" text-anchor="middle" fill="#d93025" font-weight="bold">3V3 → LCD VCC</text>
+<polyline points="500,860 470,860" fill="none" stroke="#9aa0a6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="5 4"/>
+<text x="462" y="864" font-size="11" text-anchor="end" fill="#5f6368" font-weight="normal" font-style="italic">5V: kosong pada M2/N0</text>
+<polyline points="500,896 440,896" fill="none" stroke="#202124" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="440,896 430,886 291.4,886 291.4,906 430,906" fill="#fff" stroke="#202124" stroke-width="1.5"/>
+<text x="360.7" y="900" font-size="11" text-anchor="middle" fill="#202124" font-weight="bold">GND (rail bersama)</text>
+<rect x="880" y="676" width="160" height="244" rx="8" fill="#ffffff" stroke="#5f6368" stroke-width="1.5"/>
+<text x="960.0" y="696" font-size="14" text-anchor="middle" fill="#202124" font-weight="bold">USB-A female</text>
+<text x="960.0" y="713" font-size="11" text-anchor="middle" fill="#5f6368" font-weight="normal">breakout, ke kabel casing</text>
+<polyline points="760,788 880,788" fill="none" stroke="#9334e6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="880" cy="788" r="4" fill="#9334e6"/>
+<text x="890" y="792" font-size="12" text-anchor="start" fill="#202124" font-weight="normal">D+</text>
+<polyline points="760,824 880,824" fill="none" stroke="#9334e6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="880" cy="824" r="4" fill="#9334e6"/>
+<text x="890" y="828" font-size="12" text-anchor="start" fill="#202124" font-weight="normal">D−</text>
+<polyline points="760,860 880,860" fill="none" stroke="#202124" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="880" cy="860" r="4" fill="#202124"/>
+<text x="890" y="864" font-size="12" text-anchor="start" fill="#202124" font-weight="normal">GND</text>
+<text x="820" y="780" font-size="10" text-anchor="middle" fill="#5f6368" font-weight="normal" font-style="italic">pasangan twisted, ≤10 cm</text>
+<circle cx="880" cy="752" r="4" fill="#d93025"/>
+<text x="890" y="756" font-size="12" text-anchor="start" fill="#202124" font-weight="normal">VBUS</text>
+<rect x="1060" y="90" width="150" height="70" rx="8" fill="#ffffff" stroke="#5f6368" stroke-width="1.5"/>
+<text x="1135.0" y="110" font-size="14" text-anchor="middle" fill="#202124" font-weight="bold">Adaptor 5 V 3 A</text>
+<text x="1135.0" y="127" font-size="11" text-anchor="middle" fill="#5f6368" font-weight="normal">teregulasi, cabang HDD</text>
+<text x="1100" y="176" font-size="11" text-anchor="middle" fill="#d93025" font-weight="bold">+5V</text>
+<text x="1180" y="176" font-size="11" text-anchor="middle" fill="#202124" font-weight="bold">GND</text>
+<polyline points="1100,160 1100,250" fill="none" stroke="#d93025" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="1090" y="250" width="20" height="44" rx="3" fill="#fff" stroke="#d93025" stroke-width="2"/>
+<polyline points="1086,290 1114,254" fill="none" stroke="#d93025" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="1082" y="268" font-size="11" text-anchor="end" fill="#202124" font-weight="bold">F1 PTC</text>
+<text x="1082" y="283" font-size="10" text-anchor="end" fill="#5f6368" font-weight="normal">hold ≈1,1–1,5 A</text>
+<polyline points="1100,294 1100,360" fill="none" stroke="#d93025" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="1066" y="360" width="68" height="40" rx="4" fill="#fff" stroke="#d93025" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="1100" y="378" font-size="10" text-anchor="middle" fill="#202124" font-weight="normal">S1 saklar</text>
+<text x="1100" y="392" font-size="10" text-anchor="middle" fill="#5f6368" font-weight="normal">(opsional)</text>
+<polyline points="1100,400 1100,470" fill="none" stroke="#d93025" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1100" cy="470" r="4" fill="#d93025"/>
+<polyline points="1100,470 1140,470 1140,486" fill="none" stroke="#d93025" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="1128,486 1152,486" fill="none" stroke="#202124" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 1128 496 Q 1140 490 1152 496" fill="none" stroke="#202124" stroke-width="2.5"/>
+<polyline points="1140,494 1140,520 1180,520" fill="none" stroke="#202124" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="1090" y="500" font-size="10" text-anchor="end" fill="#202124" font-weight="bold">C1 150 µF + 100 nF</text>
+<text x="1090" y="513" font-size="10" text-anchor="end" fill="#5f6368" font-weight="normal">dekat konektor USB-A</text>
+<polyline points="1180,160 1180,520" fill="none" stroke="#202124" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1180" cy="520" r="4" fill="#202124"/>
+<polyline points="1100,470 1100,752 1040,752" fill="none" stroke="#d93025" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="1180,520 1180,860 1040,860" fill="none" stroke="#202124" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="1174" y="852" font-size="10" text-anchor="end" fill="#5f6368" font-weight="normal" font-style="italic">ground bersama</text>
+<polyline points="960.0,920 960.0,966" fill="none" stroke="#5f6368" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="970.0" y="948" font-size="10" text-anchor="start" fill="#5f6368" font-weight="normal">kabel USB-A ↔ Micro-B USB 3.0</text>
+<rect x="860" y="966" width="200" height="70" rx="8" fill="#ffffff" stroke="#5f6368" stroke-width="1.5"/>
+<text x="960.0" y="986" font-size="14" text-anchor="middle" fill="#202124" font-weight="bold">ORICO 2020U3 + WD5000LPCX</text>
+<text x="960.0" y="1003" font-size="11" text-anchor="middle" fill="#5f6368" font-weight="normal">500 GB NTFS · 5 V 0,55 A (puncak ≈1 A)</text>
+<polyline points="570,976 570,1010" fill="none" stroke="#5f6368" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="490" y="1010" width="160" height="56" rx="8" fill="#ffffff" stroke="#5f6368" stroke-width="1.5"/>
+<text x="570.0" y="1030" font-size="14" text-anchor="middle" fill="#202124" font-weight="bold">PC Windows</text>
+<text x="570.0" y="1047" font-size="11" text-anchor="middle" fill="#5f6368" font-weight="normal">flash + log (COM)</text>
+<text x="690" y="992" font-size="10" text-anchor="middle" fill="#b06000" font-weight="normal" font-style="italic">kosongkan pada N0</text>
+<rect x="24" y="948" width="440" height="130" rx="8" fill="#f8f9fa" stroke="#dadce0"/>
+<text x="36" y="966" font-size="12" text-anchor="start" fill="#202124" font-weight="bold">Legenda</text>
+<polyline points="36,988 62,988" fill="none" stroke="#d93025" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="68" y="992" font-size="11" text-anchor="start" fill="#202124" font-weight="normal">3V3 / 5V</text>
+<polyline points="142,988 168,988" fill="none" stroke="#202124" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="174" y="992" font-size="11" text-anchor="start" fill="#202124" font-weight="normal">GND</text>
+<polyline points="248,988 274,988" fill="none" stroke="#1a73e8" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="280" y="992" font-size="11" text-anchor="start" fill="#202124" font-weight="normal">LCD SPI</text>
+<polyline points="354,988 380,988" fill="none" stroke="#c5221f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="386" y="992" font-size="11" text-anchor="start" fill="#202124" font-weight="normal">Backlight</text>
+<polyline points="36,1010 62,1010" fill="none" stroke="#188038" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="68" y="1014" font-size="11" text-anchor="start" fill="#202124" font-weight="normal">Tombol</text>
+<polyline points="142,1010 168,1010" fill="none" stroke="#e37400" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="174" y="1014" font-size="11" text-anchor="start" fill="#202124" font-weight="normal">Encoder</text>
+<polyline points="248,1010 274,1010" fill="none" stroke="#9334e6" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="280" y="1014" font-size="11" text-anchor="start" fill="#202124" font-weight="normal">USB D+/D−</text>
+<circle cx="42" cy="1034" r="6" fill="#fbbc04" stroke="#1a73e8"/>
+<text x="54" y="1038" font-size="11" text-anchor="start" fill="#202124" font-weight="normal">pin dipakai</text>
+<text x="144" y="1038" font-size="11" text-anchor="start" fill="#b06000" font-weight="bold">GPIO0/3/45/46, 35–37</text>
+<text x="286" y="1038" font-size="11" text-anchor="start" fill="#5f6368" font-weight="normal">hindari (strapping/PSRAM)</text>
+<text x="36" y="1062" font-size="11" text-anchor="start" fill="#5f6368" font-weight="normal">Semua logika 3,3 V. Adaptor 5 V TIDAK ke pin 5V board pada M2/N0.</text>
+</svg>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Prototipe Terra Home Hub: konfigurasi perangkat Terra dan rancangan akses HDD melalui ESP32-S3.">
+  <title>Terra · Home Hub</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%2327342c'/%3E%3Cpath d='M10 24v-8m7 14V10m7 17V13m7 10v-6' stroke='%23d0e7ae' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Lewati navigasi</a>
+<aside class="sidebar">
+  <a class="brand" href="#files"><span class="brand-mark" aria-hidden="true">▥</span><span>terra<small>HOME HUB</small></span></a>
+  <div class="nav-label">RUANG ANDA</div>
+  <nav aria-label="Menu utama">
+    <a href="#files" data-page="files"><span aria-hidden="true">▤</span> Penyimpanan <small>01</small></a>
+    <a href="#device" data-page="device"><span aria-hidden="true">♫</span> Musik & layar</a>
+    <a href="#settings" data-page="settings"><span aria-hidden="true">☷</span> Konfigurasi</a>
+    <a href="#proposal" data-page="proposal"><span aria-hidden="true">◇</span> Rencana integrasi</a>
+  </nav>
+  <div class="sidebar-note"><span class="tiny-led"></span> ESP32-S3 N16R8<strong>Satu perangkat.<br>Dua kebutuhan.</strong><p>Musik di meja.<br>File dalam jangkauan.</p></div>
+  <div class="sidebar-bottom"><span class="avatar">A</span><div>Workspace pribadi<small>Prototipe · Oktober 2026</small></div></div>
+</aside>
+<div class="workspace">
+  <header class="topbar"><span>Workspace <span class="slash">/</span> <b id="page-label">Penyimpanan</b></span><span class="pill">MODE PROTOTIPE</span></header>
+  <main id="main" tabindex="-1">
+    <div class="demo-banner"><span class="banner-icon" aria-hidden="true">i</span><p><b>Ruang uji tampilan.</b> File di sini adalah contoh. Pengaturan disimpan sebagai draf di browser ini, belum dikirim ke perangkat.</p></div>
+
+    <section id="files" class="page">
+      <div class="heading"><div><p class="eyebrow">PENYIMPANAN PRIBADI</p><h1>File Anda, satu tempat.</h1><p class="muted">Rancangan akses HDD di rumah, dari mana saja.</p></div><a class="button primary" href="#settings">Atur penyimpanan <span aria-hidden="true">↗</span></a></div>
+      <div class="overview-grid">
+        <article class="storage-card"><div class="card-top"><span class="icon-box" aria-hidden="true">▤</span><span class="tag">HARDWARE ANDA</span></div><h2>WD Blue · WD5000LPCX</h2><div class="capacity">500 <span>GB</span></div><p>ORICO 2020U3 · NTFS · USB-A / Micro-B</p><div class="disk-track" aria-label="Pemakaian belum dibaca"></div><div class="small spread"><span>Terpakai: belum diketahui</span><span>Belum dipasang</span></div></article>
+        <article class="connection-card"><div class="card-top"><span class="icon-box" aria-hidden="true">⌁</span><span class="tag neutral">BELUM TERHUBUNG</span></div><h2>Akses jarak jauh</h2><p>Rencana web di Vercel, file tetap di rumah. ESP32 menghubungi relay cloud melalui koneksi keluar yang terenkripsi.</p><div class="mini-route"><span>Browser</span><i>→</i><span>Relay</span><i>→</i><span>ESP32</span></div><a class="text-link" href="#proposal">Pelajari alurnya <span aria-hidden="true">↗</span></a></article>
+      </div>
+      <div class="notice"><span class="notice-sign" aria-hidden="true">!</span><div><b>NTFS perlu keputusan sebelum integrasi.</b><p>Firmware standar saat ini belum membaca NTFS. HDD tidak akan diformat otomatis. Profil diagnostik USB membaca sektor tanpa mount atau tulis. Akses file NTFS belum tersedia.</p></div><a href="#proposal">Lihat pilihan →</a></div>
+      <section class="file-panel" aria-labelledby="file-title">
+        <div class="panel-heading"><div><h2 id="file-title">Jelajahi file</h2><span class="small muted">Koleksi contoh untuk mencoba navigasi</span></div><button class="button" type="button" disabled title="Upload tersedia setelah backend dan filesystem siap">↑ Unggah · belum tersedia</button></div>
+        <div class="file-toolbar"><div id="breadcrumb" class="breadcrumb" aria-label="Lokasi folder"></div><label class="search"><span aria-hidden="true">⌕</span><span class="sr-only">Cari nama file</span><input id="search" type="search" placeholder="Cari di folder ini…" maxlength="120"></label></div>
+        <div class="filterbar"><div class="filters" role="group" aria-label="Jenis file"><button type="button" data-filter="all" aria-pressed="true">Semua</button><button type="button" data-filter="folder" aria-pressed="false">Folder</button><button type="button" data-filter="file" aria-pressed="false">Dokumen</button></div><label class="sort small">Urutkan <select id="sort"><option value="name">Nama A–Z</option><option value="newest">Terbaru</option></select></label></div>
+        <div class="table-wrap"><table><thead><tr><th scope="col">Nama</th><th scope="col">Jenis</th><th scope="col">Ukuran</th><th scope="col">Diubah</th><th scope="col"><span class="sr-only">Aksi</span></th></tr></thead><tbody id="file-list"></tbody></table></div>
+        <div id="empty" class="empty" hidden><b>Tidak ada hasil.</b><p>Coba kata kunci atau filter lain.</p></div>
+        <div class="panel-footer"><span id="file-count"></span><span><span class="small-dot"></span> Semua file adalah data contoh</span></div>
+      </section>
+      <div class="bottom-note"><span aria-hidden="true">◇</span> Akses file nyata baru aktif setelah uji USB, filesystem, dan autentikasi selesai.</div>
+    </section>
+
+    <section id="device" class="page" hidden>
+      <div class="heading"><div><p class="eyebrow">PERANGKAT MEJA</p><h1>Musik, sekilas saja.</h1><p class="muted">ST7789 kini 240 × 240. Tampilan ringkas, tetap terbaca.</p></div><span class="pill">PREVIEW LAYAR</span></div>
+      <div class="device-grid"><article class="panel device-panel"><div class="device-case"><img src="lcd-preview.png" width="240" height="240" alt="Render firmware: DEMO, OFF, Test Song, Test Artist, progres sepertiga, 01:00 / 03:00, Playing, VOL 72"><div class="physical-controls" aria-hidden="true"><i></i><i></i><i></i><span></span></div></div><p class="small muted">Render dari kode LVGL firmware, bukan foto hardware.</p></article><article class="panel"><p class="eyebrow">KONFIGURASI AKTIF DI SOURCE</p><h2>Panel 240 × 240</h2><dl><div><dt>Controller</dt><dd>ST7789</dd></div><div><dt>Orientasi awal</dt><dd>0° · gap 0 / 0</dd></div><div><dt>Board</dt><dd>YD-style V1.3 · ESP32-S3 N16R8</dd></div><div><dt>Memori</dt><dd>Flash 16 MB · PSRAM 8 MB</dd></div><div><dt>Sumber data saat ini</dt><dd>Fixture M1 statis</dd></div></dl><p class="muted small">Offset panel tetap perlu dikalibrasi pada modul fisik. Input M2 sudah ada di firmware sebagai log diagnostik. Uji hardware dan BLE masih menunggu.</p><a class="button" href="#settings">Ubah draf perangkat →</a></article></div>
+      <article class="panel controls-info"><h2>Kontrol fisik M2 · belum diuji pada hardware</h2><div class="control-grid"><div><kbd>Ⅰ</kbd><b>Previous</b><small>GPIO4</small></div><div><kbd>Ⅱ</kbd><b>Play / Pause</b><small>GPIO5</small></div><div><kbd>Ⅲ</kbd><b>Next</b><small>GPIO6</small></div><div><kbd>↻</kbd><b>Volume ±2</b><small>GPIO15 / 16</small></div><div><kbd>●</kbd><b>Mute</b><small>GPIO17</small></div></div></article>
+    </section>
+
+    <section id="settings" class="page" hidden>
+      <div class="heading"><div><p class="eyebrow">PREFERENSI PERANGKAT</p><h1>Atur sesuai kebutuhan.</h1><p class="muted">Simpan rancangan Anda sebelum integrasi firmware dimulai.</p></div><button type="button" id="export" class="button">↓ Ekspor draf JSON</button></div>
+      <form id="config-form">
+        <div class="settings-grid">
+          <fieldset class="panel"><legend>01 / Musik & layar</legend><label>Nama perangkat<input name="deviceName" maxlength="31" required></label><div class="field-row"><label>Orientasi<select name="rotation"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label><label>Langkah volume<select name="volumeStep"><option value="1">1%</option><option value="2">2% · blueprint</option><option value="5">5%</option></select></label></div><label class="check"><input type="checkbox" name="autoConnect"> Sambung ulang BLE otomatis</label><p class="small muted">Layar: ST7789 240×240. Mapping pin dan kalibrasi gap berada di firmware. Pengaturan ini belum mengubah perangkat.</p></fieldset>
+          <fieldset class="panel"><legend>02 / Penyimpanan</legend><label>Nama penyimpanan<input name="storageName" maxlength="40" required></label><label>Rencana filesystem<select name="filesystem"><option value="ntfs">Pertahankan NTFS · perlu riset driver</option><option value="fat32-test">Media uji FAT32 terpisah · direkomendasikan</option></select></label><div class="locked-field"><span>Mode akses tahap pertama</span><b>Read-only</b></div><p class="small muted">HDD Anda 500 GB NTFS. Pilihan di atas hanya mencatat rencana. Tidak ada fungsi format, hapus, atau mount pada prototipe.</p></fieldset>
+          <fieldset class="panel"><legend>03 / Jaringan & akses</legend><label>Nama Wi-Fi (opsional)<input name="wifiName" maxlength="32" placeholder="Contoh: Rumah"></label><label>Rute jarak jauh<select name="remoteMode"><option value="undecided">Belum dipilih</option><option value="vercel-relay">Vercel + relay · uji kelayakan</option><option value="cloud-relay">Relay cloud terpisah</option><option value="cloudflare-free">Cloudflare Free · kandidat dengan kuota</option><option value="router-vpn">VPN pada router yang mendukung</option><option value="lan">LAN saja</option></select></label><p class="small muted">Tidak memasukkan password Wi-Fi atau token di web demo. Kredensial akan diprovisikan melalui jalur lokal yang aman saat implementasi.</p></fieldset>
+          <fieldset class="panel"><legend>04 / Batas & status</legend><dl><div><dt>Server di rumah</dt><dd>ESP32 saja</dd></div><div><dt>HDD USB</dt><dd>Belum diuji</dd></div><div><dt>NTFS di firmware</dt><dd>Belum didukung</dd></div><div><dt>Autentikasi NAS</dt><dd>Belum diimplementasikan</dd></div></dl><p class="small muted">Tidak ada koneksi ke IP lokal, disk, atau relay. Login hosting prototipe bukan autentikasi NAS.</p><a class="text-link" href="#proposal">Tinjau keputusan teknis ↗</a></fieldset>
+        </div>
+        <div class="save-bar"><div><b>Draf lokal</b><p id="saved-label" class="small muted">Belum ada draf tersimpan.</p></div><div class="save-actions"><button id="reset" type="button" class="button">Reset draf</button><button type="submit" class="button primary">Simpan draf <span aria-hidden="true">✓</span></button></div></div>
+        <p id="form-error" class="form-error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="proposal" class="page" hidden>
+      <div class="heading"><div><p class="eyebrow">M2 / N0 · FIRMWARE DIAGNOSTIK</p><h1>ESP32 di pusatnya.</h1><p class="muted">Tanpa server PC di rumah. Dengan batas yang perlu kita selesaikan.</p></div><span class="pill">MENUNGGU UJI HARDWARE</span></div>
+      <article class="panel flow-panel"><h2>Bagaimana file sampai ke browser?</h2><p class="muted">ESP32 membuka koneksi keluar. Relay meneruskan permintaan melalui koneksi itu.</p><div class="flow"><div><span>01</span><b>Browser Anda</b><small>Login & pilih file</small></div><i>⇄</i><div><span>02</span><b>Web + relay cloud</b><small>HTTPS / WSS</small></div><i>⇄</i><div><span>03</span><b>ESP32-S3</b><small>Wi-Fi → USB Host</small></div><i>⇄</i><div><span>04</span><b>HDD USB 500 GB</b><small>Filesystem belum siap</small></div></div><p class="small muted">Data dapat diteruskan tanpa salinan permanen di cloud. Dengan TLS per koneksi, relay masih dapat melihat data; ini belum enkripsi ujung-ke-ujung.</p></article>
+      <div class="proposal-grid"><article class="panel"><p class="eyebrow">BISAKAH DENGAN VERCEL?</p><h2>Bisa, dengan rancangan relay.</h2><p>Vercel cocok untuk hosting web. WebSocket kini tersedia dalam beta, tetapi koneksi akan ditutup saat durasi Function habis. Browser dan ESP32 juga bisa masuk ke instance berbeda.</p><p>Relay perlu autentikasi, koordinasi antar-instance, reconnect, dan transfer per bagian yang dapat dilanjutkan. Hosting halaman saja belum memberikan akses ke HDD.</p><a class="text-link" href="https://vercel.com/docs/functions/websockets" target="_blank" rel="noreferrer">Dokumentasi Vercel ↗</a></article><article class="panel warm"><p class="eyebrow">KEPUTUSAN PERTAMA</p><h2>NTFS belum bisa langsung dipakai.</h2><p>Stack FatFs standar proyek tidak membaca NTFS. Mempertahankannya berarti riset port driver, mulai read-only, tanpa jaminan kompatibilitas atau kestabilan.</p><p><b>Saran:</b> buktikan alur dengan flashdisk FAT32 terpisah. HDD utama tetap utuh. FAT32 membatasi setiap file di bawah 4 GiB; pilihan ini belum tentu cocok untuk koleksi Anda.</p></article></div>
+      <div class="proposal-grid"><article class="panel"><p class="eyebrow">PERANGKAT YANG SUDAH DIKENALI</p><h2>WD5000LPCX + ORICO 2020U3</h2><p>HDD 500 GB NTFS: label 5 V / 0,55 A; datasheet WD mencantumkan arus puncak 1 A. Chip NS1068X disebut listing casing, belum diverifikasi pada unit fisik.</p><p>Rencana suplai 5 V 3 A bercabang langsung ke board dan daya HDD berproteksi. Kemampuan daya port board serta pad jumper belum diuji. Jangan menganggap adaptor USB-C menyediakan daya tambahan.</p><p class="small muted">N0: baca identitas, kapasitas, LBA0 dan sektor awal MBR. Signature NTFS bukan akses file. Tidak ada mount, format atau tulis.</p></article><article class="panel"><p class="eyebrow">KANDIDAT TANPA LANGGANAN</p><h2>Cloudflare Free sebagai relay.</h2><p>Workers + Durable Objects dengan WebSocket hibernation dapat menjadi perantara. ESP32 membuka koneksi keluar; dashboard dapat tetap di Vercel.</p><p>Gratis dalam kuota, bukan transfer tak terbatas. Layanan relay dan login NAS belum dibuat. Kita mulai setelah akses file lokal terbukti.</p><a class="text-link" href="https://developers.cloudflare.com/durable-objects/platform/pricing/" target="_blank" rel="noreferrer">Batas paket Cloudflare ↗</a></article></div>
+      <article class="panel"><h2>Urutan pengembangan</h2><ol class="milestones"><li><span>01</span><div><b>Validasi daya & USB</b><p>Suplai 5 V untuk spin-up HDD, proteksi VBUS, bridge casing mendukung USB MSC BOT. Profil usb-probe memakai COM/UART untuk log; native USB untuk HDD. Pembacaan sektor tersedia, belum diuji fisik.</p></div><em>Perlu hardware</em></li><li><span>02</span><div><b>Baca media uji</b><p>Mount read-only, daftar file, unduh melalui LAN, uji checksum dan cabut-pasang. USB 12 Mbit/s berarti hasil nyata di bawah 1,5 MB/s.</p></div><em>Gerbang kelayakan</em></li><li><span>03</span><div><b>Putuskan filesystem HDD</b><p>Riset NTFS read-only, atau migrasi terencana setelah backup dan persetujuan terpisah. Tidak ada format otomatis.</p></div><em>Keputusan pemilik</em></li><li><span>04</span><div><b>Hubungkan web & relay</b><p>Uji login, isolasi pemilik, perangkat offline, koneksi putus, transfer lanjut, dan BLE musik bersamaan dengan Wi-Fi.</p></div><em>Setelah LAN stabil</em></li></ol></article>
+      <div class="notice"><span class="notice-sign" aria-hidden="true">!</span><div><b>Target realistis: file server pribadi ringan.</b><p>Satu transfer aktif dahulu. Bukan pengganti NAS untuk transfer besar, banyak pengguna, atau satu-satunya backup.</p></div></div>
+    </section>
+    <footer>TERRA <span>Home Hub / ESP32-S3 / M2 + N0</span></footer>
+  </main>
+</div>
+<dialog id="file-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><span class="eyebrow">FILE CONTOH</span><button id="close-dialog" type="button" class="icon-button" aria-label="Tutup preview">×</button></div><h2 id="dialog-title"></h2><pre id="file-content"></pre><button type="button" id="download" class="button primary">↓ Unduh contoh</button><p class="small muted">Isi dibuat untuk prototipe, tidak dibaca dari HDD Anda.</p></dialog>
+<div id="toast" role="status" class="toast" hidden></div>
+</body>
+</html>

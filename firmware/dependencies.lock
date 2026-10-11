@@ -1,0 +1,75 @@
+dependencies:
+  espressif/esp_lvgl_port:
+    component_hash: d3c020b45c3dfc0d1706a83b63a1c34a6eb444a6e935f9afff79f92b7b94dcef
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.2'
+    - name: lvgl/lvgl
+      registry_url: https://components.espressif.com
+      require: public
+      version: '>=8,<10'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.9.0
+  espressif/usb:
+    component_hash: 99eee72ea224d9117d4c342442717a1f20bf8112e2ab5d7d7038b827874f4c92
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32s31
+    - esp32p4
+    - esp32h4
+    - linux
+    version: 1.6.0
+  espressif/usb_host_msc:
+    component_hash: d8765c212bb4915d42560886fac3cc5059d61a0bfa14152b32ea9a5258e7a0c9
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    - name: espressif/usb
+      registry_url: https://components.espressif.com
+      require: public
+      rules:
+      - if: idf_version >=6.0
+      - if: target not in ["linux"]
+      version: ^1.0.0
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32s2
+    - esp32s3
+    - esp32p4
+    - esp32h4
+    - esp32s31
+    - linux
+    version: 1.3.0
+  idf:
+    source:
+      type: idf
+    version: 6.0.3
+  lvgl/lvgl:
+    component_hash: 184e532558c1c45fefed631f3e235423d22582aafb4630f3e8885c35281a49ae
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 9.5.0
+direct_dependencies:
+- espressif/esp_lvgl_port
+- espressif/usb_host_msc
+- idf
+- lvgl/lvgl
+manifest_hash: f4690b938bce7d68096eaf2762576c61bca695ee023084e2d96b4fbaf22b2932
+target: esp32s3
+version: 3.0.0
