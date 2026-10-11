@@ -1,5 +1,18 @@
 # Laporan validasi
 
+## M5 — 12 Oktober 2026
+
+**Software tested:** `cargo test --workspace` lulus (estimasi posisi, nama source,
+vector protokol). **Tested on the user's laptop** (Windows 11 26100): sesi media
+dibuat oleh audio senyap dengan MediaSession metadata di browser pane aplikasi
+Claude, bukan Spotify. `terra-cli media` mencetak Source `Claude`, judul, artis,
+album, `Playing`, posisi yang maju (87,3 s lalu 90,4 s setelah 3 detik) dan durasi
+216 s. `media --watch` mencatat Paused, Playing, pergantian lagu, dan seek ke 150 s
+melalui event GSMTC tanpa polling. Tanpa sesi aktif: "No active media session".
+
+**Belum diverifikasi:** Spotify desktop, YouTube/YouTube Music di Chrome/Edge,
+aplikasi yang tidak memperbarui `LastUpdatedTime`, dan beberapa sesi bersamaan.
+
 ## M3/M4 — 12 Oktober 2026
 
 **Compile verified:** build `normal` 878.821 byte dan `usb-probe` 945.197 byte, ESP-IDF

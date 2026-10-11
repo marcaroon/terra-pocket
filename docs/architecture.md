@@ -34,7 +34,7 @@ dan CLI informasi versi yang berfungsi. Tidak ada dependency eksternal Rust.
 | Crate | Tanggung jawab tahap berikutnya |
 | --- | --- |
 | protocol | Codec biner, fragmentasi, validasi, shared vectors (M4) |
-| media-windows | GSMTC session manager dan subscriptions (M5/M7) |
+| media-windows | GSMTC: snapshot dan langganan perubahan (M5, berjalan); perintah media (M7) |
 | audio-windows | Core Audio volume/mute dan callback perubahan (M8) |
 | ble-windows | Windows central, GATT, handshake, reconnect (M6/M9) |
 | companion-core | Koordinator lintas domain, tidak bergantung frontend |

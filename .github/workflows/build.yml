@@ -69,6 +69,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Version command failed' }
           & ./target/debug/terra-cli.exe --help
           if ($LASTEXITCODE -ne 0) { throw 'Help command failed' }
+          # The runner has no media session; 0 = none/session found, 1 = GSMTC unavailable.
           & ./target/debug/terra-cli.exe media
+          if ($LASTEXITCODE -gt 1) { throw "media exited $LASTEXITCODE" }
+          & ./target/debug/terra-cli.exe devices
           if ($LASTEXITCODE -ne 2) { throw 'Unimplemented command must exit 2' }
           exit 0

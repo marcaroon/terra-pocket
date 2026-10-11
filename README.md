@@ -13,7 +13,8 @@ Windows. Spesifikasi lengkap: [PROJECT_SPEC.md](PROJECT_SPEC.md).
 | N0 | Probe sektor USB HDD read-only | Build lulus; uji fisik menunggu USB-A + cabang daya |
 | M3 | BLE GATT `Terra`: RX/TX/STATUS | Diuji dari laptop: discover, connect, service, write RX, subscribe TX |
 | M4 | Protokol V1: fragmentasi, reassembly, HELLO, MEDIA/VOLUME_STATE | 57 vector bersama C/Rust/Python; uji BLE hardware lulus; konfirmasi visual layar menunggu |
-| M5+ | Media reader Windows, BLE companion, kontrol, volume, GUI | Belum dimulai |
+| M5 | `terra-cli media` / `media --watch` membaca sesi media Windows (GSMTC) | Diuji di laptop: metadata, status, timeline, pause/track/seek |
+| M6+ | BLE companion Windows, kontrol media, volume, reliability, GUI | Belum dimulai |
 
 Wire format: [ble-protocol.md](docs/ble-protocol.md). Uji BLE dari PC memakai harness
 dev `scripts/ble-test.py` sampai companion Windows (M6) tersedia. Tombol fisik masih

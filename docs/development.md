@@ -62,8 +62,10 @@ lewat exit code idf.py.
 Vector protokol dibuat ulang dengan `python scripts/gen-protocol-vectors.py
 docs/protocol-test-vectors`; CI membandingkan hasilnya dengan isi repo.
 
-CLI menerima `--help` dan `--version`. `media`, `devices`, `connect`, dan `monitor`
-sengaja menghasilkan exit code 2 sampai M5/M6 agar tidak mengesankan fitur selesai.
+CLI: `terra-cli media` mencetak sesi media Windows saat ini (exit 0, termasuk
+"No active media session"; exit 1 bila GSMTC tidak tersedia). `terra-cli media --watch`
+mencetak satu baris per perubahan lagu/playback/seek sampai Ctrl+C. `devices`,
+`connect`, dan `monitor` sengaja exit 2 sampai M6 agar tidak mengesankan fitur selesai.
 
 ## Preview UI di komputer
 

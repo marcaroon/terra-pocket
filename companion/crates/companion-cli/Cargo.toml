@@ -12,5 +12,8 @@ path = "src/main.rs"
 [dependencies]
 companion-core = { path = "../companion-core" }
 
+[target.'cfg(windows)'.dependencies]
+media-windows = { path = "../media-windows" }
+
 [lints]
 workspace = true

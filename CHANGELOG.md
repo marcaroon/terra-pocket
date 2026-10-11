@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — M5 Windows media reader
+
+- Crate `media-windows` (windows-rs 0.62.2, `Windows.Media.Control`): sesi saat ini,
+  source (nama tampilan Windows atau heuristik AppUserModelId), judul, artis, album,
+  status playback, posisi yang diestimasi dari `LastUpdatedTime`, dan durasi.
+- `terra-cli media` mencetak snapshot; `terra-cli media --watch` berlangganan
+  CurrentSessionChanged/SessionsChanged dan event media/playback/timeline sesi aktif,
+  memindahkan langganan saat sesi berganti, dan hanya mencetak perubahan lagu,
+  playback, atau seek (bukan posisi berjalan).
+- `devices`/`connect`/`monitor` tetap exit 2 sampai M6. Perintah media ke Windows
+  menunggu M7. Tanpa kode `unsafe`.
+
 ## 0.2.0 — 2026-10-12 (M3 BLE GATT + M4 protokol)
 
 - Firmware 0.2.0: NimBLE peripheral `Terra` dengan service 6F3A0001 dan karakteristik
