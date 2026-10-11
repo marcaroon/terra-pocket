@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     container: espressif/idf:v6.0.3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build ESP32-S3 firmware
         shell: bash
         run: |
@@ -26,6 +26,8 @@ jobs:
           else
             idf.py build
           fi
+          # The container user differs from the checkout owner; allow git to read it.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git diff --exit-code -- dependencies.lock
       - name: Test time formatting on host
         run: |
@@ -49,7 +51,7 @@ jobs:
       run:
         working-directory: companion
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build workspace
         run: cargo build --workspace --locked
       - name: Smoke test CLI
