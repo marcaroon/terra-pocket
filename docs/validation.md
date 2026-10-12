@@ -1,5 +1,23 @@
 # Laporan validasi
 
+## V2 cover layar penuh — 12 Oktober 2026
+
+Permintaan pengguna setelah melihat tata letak 160×160: cover memenuhi layar dan
+bergantian dengan tampilan teks. Keputusan pengguna: ganti tampilan dengan
+**tekan lama encoder**, cover **tanpa overlay**.
+
+**Software tested:** artwork protokol menjadi 240×240 (80 vector; BEGIN 160×160
+ditolak); tes host tekan singkat/lama; transport, penerima, dan 22 tes Rust lulus;
+firmware 0.6.0 kedua profil dibangun dengan `-Werror` (USB probe 949.273 B);
+preview host tampilan teks dan cover layar penuh di dalam batas layar.
+`terra-cli artwork` (Chrome): JPEG 240×240, 12.414 byte.
+
+**Hardware tested (pengembang, COM11, firmware USB probe 0.6.0):** HELLO 0.6.0
+dengan bit3; cover 5.650 byte terkirim dalam 1,0 s (25 chunk, tulis terlama 89 ms);
+UART `Artwork 928a3327 shown` 1 s setelah HELLO_ACK, tanpa warning. Tampilan
+awal teks (NVS belum berisi pilihan). Tekan lama encoder, tampilan cover di LCD,
+dan penyimpanan pilihan setelah restart menunggu uji pengguna.
+
 ## Stabilitas MVP dan V2 album artwork — 12 Oktober 2026
 
 **Stabilitas MVP (sebelum V2):** host C, 19 tes Rust, 2 tes aplikasi, `tsc` strict

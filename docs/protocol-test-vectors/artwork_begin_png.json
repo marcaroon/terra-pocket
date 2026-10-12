@@ -3,6 +3,6 @@
   "kind": "artwork_begin",
   "expect": "malformed",
   "note": "format 2",
-  "bytes": "010000000200a000a00064000000",
+  "bytes": "010000000200f000f00064000000",
   "fields": []
 }

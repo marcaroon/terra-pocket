@@ -2,6 +2,12 @@
 
 ## Unreleased — V2 album artwork (2026-10-12)
 
+- Cover layar penuh (firmware 0.6.0): artwork menjadi 240×240 dan tampil sendirian
+  memenuhi layar sebagai tampilan kedua. Tekan lama encoder (≥ 600 ms) berganti
+  antara tampilan teks (seperti M4) dan cover; pilihan disimpan di NVS. Tekan
+  singkat tetap mute, kini dikirim saat tombol dilepas. Tata letak cover 160×160
+  di atas teks dihapus. 80 vector (BEGIN 160×160 kini ditolak).
+
 - Protokol: ARTWORK_BEGIN/CHUNK/END (0x50–0x52) dan capability bit3, didokumentasikan
   di `ble-protocol.md` §4.8; `protocol_version` tetap 1, firmware/companion lama
   tetap kompatibel. 79 vector bersama Python/C/Rust (termasuk CRC-32).

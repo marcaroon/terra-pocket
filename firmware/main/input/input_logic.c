@@ -19,6 +19,33 @@ bool button_filter_sample(button_filter_t *button, bool pressed, uint32_t now_ms
     return false;
 }
 
+void press_timer_init(press_timer_t *timer, bool pressed)
+{
+    *timer = (press_timer_t){.blocked = pressed};
+}
+
+press_event_t press_timer_sample(press_timer_t *timer, bool pressed, uint32_t now_ms, uint32_t long_ms)
+{
+    if (!pressed) {
+        const bool short_press = timer->held && !timer->long_sent;
+        *timer = (press_timer_t){0};
+        return short_press ? PRESS_SHORT : PRESS_NONE;
+    }
+    if (timer->blocked) {
+        return PRESS_NONE;
+    }
+    if (!timer->held) {
+        timer->held = true;
+        timer->pressed_ms = now_ms;
+        return PRESS_NONE;
+    }
+    if (!timer->long_sent && (uint32_t)(now_ms - timer->pressed_ms) >= long_ms) {
+        timer->long_sent = true;
+        return PRESS_LONG;
+    }
+    return PRESS_NONE;
+}
+
 static bool at_detent(const encoder_filter_t *encoder, uint8_t ab)
 {
     return ab == 3 || (encoder->half_step && ab == 0);

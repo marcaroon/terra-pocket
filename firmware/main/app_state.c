@@ -126,6 +126,13 @@ bool app_state_copy_artwork(uint16_t *out)
     return present;
 }
 
+void app_state_set_view(view_t view)
+{
+    lock();
+    state.view = view;
+    unlock();
+}
+
 void app_state_apply_volume(const protocol_volume_t *volume)
 {
     assert(volume != NULL);

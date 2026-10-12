@@ -14,6 +14,12 @@ typedef enum {
     LINK_PROTOCOL_MISMATCH,
 } link_state_t;
 
+/* Which screen shows a track that has artwork; chosen on the device, kept in NVS. */
+typedef enum {
+    VIEW_TEXT = 0,
+    VIEW_ARTWORK = 1,
+} view_t;
+
 /* Values match the MEDIA_STATE wire encoding. */
 typedef enum {
     PLAYBACK_NO_MEDIA = PROTOCOL_PLAYBACK_NO_MEDIA,
@@ -38,6 +44,7 @@ typedef struct {
      * pixels stay in app_state; the version changes whenever they do. */
     bool artwork;
     uint32_t artwork_version;
+    view_t view; /* not cleared by link changes */
 } media_state_t;
 
 esp_err_t app_state_init(void);
@@ -57,3 +64,4 @@ void app_state_clear_artwork(void);
 /* Copies the current artwork into `out` and returns true, or returns false
  * when there is none. */
 bool app_state_copy_artwork(uint16_t *out);
+void app_state_set_view(view_t view);

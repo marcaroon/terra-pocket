@@ -24,6 +24,7 @@ static void input_task(void *arg)
 {
     (void)arg;
     button_filter_t filters[4];
+    press_timer_t push; /* encoder push: short = mute, long = view */
     encoder_filter_t encoder;
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     for (unsigned i = 0; i < 4; ++i) {
@@ -33,6 +34,7 @@ static void input_task(void *arg)
                  filters[i].stable ? "LOW/pressed" : "HIGH/released");
 #endif
     }
+    press_timer_init(&push, filters[3].stable);
     encoder_filter_init(&encoder, read_encoder(), BOARD_ENCODER_HALF_STEP);
     TickType_t wake = xTaskGetTickCount();
     uint32_t dropped = 0, last_report = now;
@@ -47,11 +49,16 @@ static void input_task(void *arg)
                          (unsigned long)(now - filters[i].changed_ms));
             }
 #endif
-            if (button_filter_sample(&filters[i], pressed,
-                                     now, BOARD_INPUT_DEBOUNCE_MS)) {
+            const bool edge = button_filter_sample(&filters[i], pressed, now, BOARD_INPUT_DEBOUNCE_MS);
+            if (i < 3 && edge) {
                 const input_event_t event = (input_event_t)i;
                 if (xQueueSend(events, &event, 0) != pdTRUE) ++dropped;
             }
+        }
+        const press_event_t press = press_timer_sample(&push, filters[3].stable, now, BOARD_LONG_PRESS_MS);
+        if (press != PRESS_NONE) {
+            const input_event_t event = press == PRESS_LONG ? INPUT_VIEW_TOGGLE : INPUT_MUTE;
+            if (xQueueSend(events, &event, 0) != pdTRUE) ++dropped;
         }
         const int step = encoder_filter_sample(&encoder, read_encoder()) * BOARD_ENCODER_DIRECTION;
         if (step != 0) {

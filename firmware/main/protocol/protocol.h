@@ -82,7 +82,7 @@ typedef enum {
 #define PROTOCOL_CAP_ARTWORK       0x0008
 
 #define PROTOCOL_ARTWORK_JPEG         1
-#define PROTOCOL_ARTWORK_SIDE         160
+#define PROTOCOL_ARTWORK_SIDE         240 /* full screen */
 #define PROTOCOL_ARTWORK_MAX_BYTES    32768
 #define PROTOCOL_ARTWORK_CHUNK_HEADER 8
 

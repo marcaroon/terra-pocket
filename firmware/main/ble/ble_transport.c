@@ -216,8 +216,8 @@ static void handle_artwork(uint8_t type, uint8_t seq, const uint8_t *payload, si
             ESP_LOGI("STATE", "Artwork %08lx shown (%lu bytes JPEG)",
                      (unsigned long)artwork.id, (unsigned long)artwork.size);
         } else {
-            ESP_LOGW(TAG, "Artwork %08lx is not a decodable 160x160 baseline JPEG",
-                     (unsigned long)artwork.id);
+            ESP_LOGW(TAG, "Artwork %08lx is not a decodable %dx%d baseline JPEG",
+                     (unsigned long)artwork.id, PROTOCOL_ARTWORK_SIDE, PROTOCOL_ARTWORK_SIDE);
             reject(PROTOCOL_ERR_MALFORMED, type, seq);
         }
         return;

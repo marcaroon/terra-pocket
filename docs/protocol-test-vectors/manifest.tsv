@@ -40,12 +40,13 @@ device_status_ready	device_status	ok	1	0	2	0	2	0	3
 device_status_bad_link	device_status	malformed
 error_not_ready	error	ok	5	16	7
 error_bad_code	error	malformed
-artwork_begin_jpeg	artwork_begin	ok	305441741	1	160	160	9876
-artwork_begin_max	artwork_begin	ok	1	1	160	160	32768
+artwork_begin_jpeg	artwork_begin	ok	305441741	1	240	240	9876
+artwork_begin_max	artwork_begin	ok	1	1	240	240	32768
 artwork_begin_clear	artwork_begin	ok	0	0	0	0	0
 artwork_begin_too_large	artwork_begin	malformed
 artwork_begin_png	artwork_begin	malformed
-artwork_begin_161	artwork_begin	malformed
+artwork_begin_160	artwork_begin	malformed
+artwork_begin_241	artwork_begin	malformed
 artwork_begin_zero_id	artwork_begin	malformed
 artwork_begin_clear_with_id	artwork_begin	malformed
 artwork_begin_reserved	artwork_begin	malformed

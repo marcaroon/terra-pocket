@@ -19,11 +19,11 @@ Windows. Spesifikasi lengkap: [PROJECT_SPEC.md](PROJECT_SPEC.md).
 | M8 | Encoder volume/mute ↔ master volume Windows (Core Audio) | Diuji di hardware: 12/12 klik encoder dan 4/4 mute sampai Windows dan kembali ke perangkat; perubahan dari Windows sampai ke perangkat. Menunggu konfirmasi visual LCD dan ganti perangkat output; lihat [uji M8](docs/m8-test.md) |
 | M9 | Reconnect otomatis dengan backoff, pemulihan BLE, perpindahan aplikasi media | Diuji di hardware: Bluetooth off/on, ESP restart, sleep/wake, Chrome ↔ Spotify, companion mati/dijalankan ulang; pulih tanpa restart. Lihat [validasi](docs/validation.md) |
 | M10 | Aplikasi Tauri 2 + React: status, tray, auto connect, start with Windows | Diuji pengguna: jendela, tray, close-to-tray, Reconnect (3 s), Auto Connect off/on, satu instance, entri startup. Sisa: start otomatis setelah restart Windows (exe release); lihat [uji M10](docs/m10-test.md) |
-| V2 | Album artwork: thumbnail Windows → JPEG 160×160 → BLE → PSRAM → LVGL | Diuji di perangkat (firmware 0.5.0): cover terkirim dan di-decode, ±1 s per lagu. Konfirmasi visual LCD menunggu; lihat [uji V2](docs/v2-test.md) |
+| V2 | Album artwork layar penuh 240×240; tekan lama encoder berganti tampilan teks/cover | Diuji di perangkat (firmware 0.6.0): cover terkirim, di-decode dan diterima ±1 s per lagu. Konfirmasi visual dan tekan lama menunggu; lihat [uji V2](docs/v2-test.md) |
 
 Wire format: [ble-protocol.md](docs/ble-protocol.md). Pemakaian sekarang: putar musik di
 Windows, lalu jalankan `companion\target\debug\terra-cli.exe connect` (atau `monitor`).
-Firmware **0.5.0** menampilkan album artwork (V2) dan mengirim tombol Previous, Play/Pause, Next serta encoder volume (±2)
+Firmware **0.6.0** menampilkan album artwork layar penuh (V2, tekan lama encoder) dan mengirim tombol Previous, Play/Pause, Next serta encoder volume (±2)
 dan mute ketika link READY; companion menjalankannya di Windows dan mengirim balik
 volume aktual (`terra-cli volume` membaca volume saja). `connect` terus berjalan dan
 menyambung ulang sendiri setelah koneksi putus (M9). Sebagai alternatif CLI, aplikasi

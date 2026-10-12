@@ -16,7 +16,6 @@ static struct {
 /* The artwork widget draws straight from the caller's buffer (ui_create). */
 static lv_image_dsc_t artwork_image;
 static uint32_t shown_artwork_version;
-static int layout = -1; /* 0 text, 1 artwork */
 
 static lv_obj_t *label(lv_obj_t *parent, uint32_t color)
 {
@@ -36,38 +35,23 @@ static void place(lv_obj_t *obj, int x, int y, int width, int height, const lv_f
     }
 }
 
-/* Text layout: the M4 screen. Artwork layout (V2): 160x160 cover on top, one
- * line each for title and artist, then progress, time, playback and volume. */
-static void apply_layout(bool with_artwork)
+/* The M4 text screen. The artwork view (V2) is the cover alone, full screen,
+ * chosen with a long press of the encoder (VIEW_ARTWORK). */
+static void place_text_layout(lv_obj_t *screen)
 {
-    if (layout == (int)with_artwork) {
-        return;
-    }
-    layout = with_artwork;
-    lv_obj_t *screen = lv_obj_get_parent(w.title);
     const int width = lv_obj_get_width(screen);
     const int height = lv_obj_get_height(screen);
-    if (with_artwork) {
-        const int side = PROTOCOL_ARTWORK_SIDE;
-        place(w.artwork, (width - side) / 2, 6, side, side, NULL);
-        place(w.link, width - 36, 6, 32, 18, &lv_font_montserrat_14);
-        place(w.title, 12, 170, width - 24, 22, &lv_font_montserrat_18);
-        place(w.artist, 12, 192, width - 24, 18, &lv_font_montserrat_14);
-        place(w.bar, 12, 214, width - 24, 3, NULL);
-        place(w.timeline, 12, height - 20, 112, 18, &lv_font_montserrat_14);
-        place(w.playback, 126, height - 20, 24, 18, &lv_font_montserrat_14);
-        place(w.volume, width - 92, height - 20, 80, 18, &lv_font_montserrat_14);
-    } else {
-        const int content = width - 36;
-        place(w.source, 18, 16, content - 54, 20, &lv_font_montserrat_14);
-        place(w.link, width - 54, 16, 36, 20, &lv_font_montserrat_14);
-        place(w.title, 18, 48, content, 66, &lv_font_montserrat_28);
-        place(w.artist, 18, height - 116, content, 26, &lv_font_montserrat_18);
-        place(w.bar, 18, height - 74, content, 4, NULL);
-        place(w.timeline, 18, height - 61, content, 20, &lv_font_montserrat_14);
-        place(w.playback, 18, height - 32, 98, 20, &lv_font_montserrat_14);
-        place(w.volume, width - 118, height - 32, 100, 20, &lv_font_montserrat_14);
-    }
+    const int content = width - 36;
+    place(w.source, 18, 16, content - 54, 20, &lv_font_montserrat_14);
+    place(w.link, width - 54, 16, 36, 20, &lv_font_montserrat_14);
+    place(w.title, 18, 48, content, 66, &lv_font_montserrat_28);
+    place(w.artist, 18, height - 116, content, 26, &lv_font_montserrat_18);
+    place(w.bar, 18, height - 74, content, 4, NULL);
+    place(w.timeline, 18, height - 61, content, 20, &lv_font_montserrat_14);
+    place(w.playback, 18, height - 32, 98, 20, &lv_font_montserrat_14);
+    place(w.volume, width - 118, height - 32, 100, 20, &lv_font_montserrat_14);
+    place(w.artwork, (width - PROTOCOL_ARTWORK_SIDE) / 2, (height - PROTOCOL_ARTWORK_SIDE) / 2,
+          PROTOCOL_ARTWORK_SIDE, PROTOCOL_ARTWORK_SIDE, NULL);
 }
 
 void ui_create(lv_obj_t *screen, uint16_t *artwork_buffer)
@@ -108,8 +92,7 @@ void ui_create(lv_obj_t *screen, uint16_t *artwork_buffer)
         .data = (const uint8_t *)artwork_buffer,
     };
     shown_artwork_version = 0;
-    layout = -1;
-    apply_layout(false);
+    place_text_layout(screen);
     lv_obj_add_flag(w.artwork, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -152,8 +135,9 @@ void ui_update(const media_state_t *state, uint32_t now_ms)
 {
     const bool ready = state->link == LINK_READY;
     const bool media = ready && state->playback != PLAYBACK_NO_MEDIA;
-    const bool with_artwork = media && state->artwork && artwork_image.data != NULL;
-    apply_layout(with_artwork);
+    /* The cover replaces everything, but only when there is one to show. */
+    const bool with_artwork = media && state->view == VIEW_ARTWORK && state->artwork
+        && artwork_image.data != NULL;
     update_artwork(state, with_artwork);
 
     const char *link_text = state->link == LINK_READY ? "BLE"
@@ -199,12 +183,14 @@ void ui_update(const media_state_t *state, uint32_t now_ms)
         set_text(w.artist, "");
     }
 
-    /* The cover identifies the source; the label would overlap it. */
     set_visible(w.source, !with_artwork);
-    set_visible(w.bar, media);
-    set_visible(w.timeline, media);
-    set_visible(w.playback, media);
-    set_visible(w.volume, ready);
+    set_visible(w.link, !with_artwork);
+    set_visible(w.title, !with_artwork);
+    set_visible(w.artist, !with_artwork);
+    set_visible(w.bar, media && !with_artwork);
+    set_visible(w.timeline, media && !with_artwork);
+    set_visible(w.playback, media && !with_artwork);
+    set_visible(w.volume, ready && !with_artwork);
 
     if (media) {
         const uint32_t position = timeline_position_ms(state->position_ms, state->duration_ms,
@@ -224,9 +210,7 @@ void ui_update(const media_state_t *state, uint32_t now_ms)
         }
         snprintf(timeline, sizeof(timeline), "%s / %s", elapsed, duration);
         set_text(w.timeline, timeline);
-        const bool playing = state->playback == PLAYBACK_PLAYING;
-        set_text(w.playback, with_artwork ? (playing ? LV_SYMBOL_PLAY : LV_SYMBOL_PAUSE)
-                                          : (playing ? "Playing" : "Paused"));
+        set_text(w.playback, state->playback == PLAYBACK_PLAYING ? "Playing" : "Paused");
     }
     if (ready) {
         char volume[16];

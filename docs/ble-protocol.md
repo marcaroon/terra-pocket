@@ -189,8 +189,9 @@ Penerima ERROR hanya mencatatnya; tidak ada balasan ERROR untuk ERROR.
 ### 4.8 Album artwork (V2)
 
 Companion mengirim cover lagu yang sedang tampil sebagai satu JPEG baseline
-160×160 (spesifikasi proyek §36), dipotong persegi di tengah dari thumbnail
-Windows. Hanya untuk perangkat dengan capability bit3; firmware tanpa bit itu
+240×240, selebar layar (spesifikasi proyek §36 menyebut 160×160; diubah atas
+permintaan pengguna agar cover bisa tampil layar penuh), dipotong persegi di
+tengah dari thumbnail Windows. Hanya untuk perangkat dengan capability bit3; firmware tanpa bit itu
 (≤ 0.4.0) tidak pernah menerima pesan ini.
 
 ```text
@@ -198,8 +199,8 @@ ARTWORK_BEGIN (0x50), 14 byte
 u32 artwork_id   ≠ 0; companion memakai CRC-32 JPEG (0 diganti 1)
 u8  format       1 = JPEG baseline
 u8  reserved     0
-u16 width        160
-u16 height       160
+u16 width        240
+u16 height       240
 u32 size         1–32768 byte JPEG
                  size 0 = lagu ini tidak punya artwork; semua field lain 0
 
@@ -224,11 +225,15 @@ Perilaku penerima:
 3. CHUNK dengan id lain, offset tidak sama dengan byte yang sudah diterima,
    atau melampaui size → ERROR `MALFORMED` dan transfer dibuang.
 4. END dengan id lain, byte kurang, CRC berbeda, atau JPEG yang tidak bisa
-   di-decode menjadi 160×160 → ERROR `MALFORMED`; layar tidak berubah.
+   di-decode menjadi 240×240 → ERROR `MALFORMED`; layar tidak berubah.
 5. END yang sah: JPEG di-decode (TJpgDec ROM) lalu ditampilkan.
 6. MEDIA_STATE dengan source/judul/artis berbeda (lagu berganti), disconnect,
    unsubscribe, dan HELLO baru menghapus artwork di layar dan membuang transfer.
    Artwork selalu dikirim **setelah** MEDIA_STATE lagunya.
+
+Firmware 0.5.0 hanya menerima 160×160 dan menolak BEGIN 240×240 (MALFORMED);
+companion lalu berhenti mencoba untuk lagu itu. Pilihan tampilan (teks atau
+cover layar penuh) diatur di perangkat dan tidak lewat protokol.
 
 Companion tidak mengulang transfer yang ditolak untuk lagu yang sama. Tidak ada
 ACK; layar menunjukkan hasilnya. Vector: `artwork_*`, `crc32_*`, `hello_artwork`.

@@ -7,7 +7,7 @@
 
 #define ARTWORK_PIXELS (PROTOCOL_ARTWORK_SIDE * PROTOCOL_ARTWORK_SIDE)
 
-/* Decodes a baseline JPEG of exactly 160x160 pixels into RGB565 in native byte
+/* Decodes a baseline JPEG of exactly PROTOCOL_ARTWORK_SIDE squared pixels into RGB565 in native byte
  * order (LVGL's RGB565 layout) using the ESP32-S3 ROM TJpgDec. Returns false for
  * other sizes, progressive or damaged data; `pixels` may then be partly written.
  * Not reentrant: call from one task. */

@@ -30,7 +30,7 @@ pub const CAP_ARTWORK: u16 = 0x0008;
 const CAP_ALL: u16 = CAP_MEDIA_STATE | CAP_VOLUME_STATE | CAP_MEDIA_COMMAND | CAP_ARTWORK;
 
 pub const ARTWORK_JPEG: u8 = 1;
-pub const ARTWORK_SIDE: u16 = 160;
+pub const ARTWORK_SIDE: u16 = 240; // full screen
 pub const ARTWORK_MAX_BYTES: u32 = 32_768;
 pub const ARTWORK_CHUNK_HEADER: usize = 8;
 
@@ -377,7 +377,7 @@ pub struct ArtworkBegin {
 impl ArtworkBegin {
     pub const CLEAR: Self = Self { id: 0, format: 0, width: 0, height: 0, size: 0 };
 
-    /// A 160x160 JPEG of `size` bytes.
+    /// A full-screen (240x240) JPEG of `size` bytes.
     pub fn jpeg(id: u32, size: u32) -> Self {
         Self { id, format: ARTWORK_JPEG, width: ARTWORK_SIDE, height: ARTWORK_SIDE, size }
     }

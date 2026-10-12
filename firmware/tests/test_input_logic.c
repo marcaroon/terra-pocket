@@ -58,6 +58,23 @@ int main(void)
     encoder_filter_init(&encoder, 1, true);
     assert(RUN(0) == 0);               // power-on between detents arms at AB=00
     assert(RUN(2, 3) == 1);
-    puts("PASS input: bounce, hold/release, rollover, direction, reversal, invalid transitions, half-step");
+    press_timer_t press;
+    press_timer_init(&press, false);
+    assert(press_timer_sample(&press, false, 0, 600) == PRESS_NONE);
+    assert(press_timer_sample(&press, true, 100, 600) == PRESS_NONE);
+    assert(press_timer_sample(&press, true, 699, 600) == PRESS_NONE);
+    assert(press_timer_sample(&press, false, 699, 600) == PRESS_SHORT); // released before 600 ms
+    assert(press_timer_sample(&press, false, 800, 600) == PRESS_NONE);
+    assert(press_timer_sample(&press, true, 1000, 600) == PRESS_NONE);
+    assert(press_timer_sample(&press, true, 1600, 600) == PRESS_LONG);  // fires while held
+    assert(press_timer_sample(&press, true, 5000, 600) == PRESS_NONE);  // once
+    assert(press_timer_sample(&press, false, 5001, 600) == PRESS_NONE); // no mute after a long press
+    press_timer_init(&press, true);                                     // held at boot
+    assert(press_timer_sample(&press, true, 2000, 600) == PRESS_NONE);
+    assert(press_timer_sample(&press, false, 2001, 600) == PRESS_NONE);
+    assert(press_timer_sample(&press, true, UINT32_MAX - 100, 600) == PRESS_NONE);
+    assert(press_timer_sample(&press, true, 498, 600) == PRESS_NONE);   // timer rollover: 599 ms held
+    assert(press_timer_sample(&press, true, 499, 600) == PRESS_LONG);   // 600 ms
+    puts("PASS input: bounce, hold/release, rollover, direction, reversal, invalid transitions, half-step, long press");
     return 0;
 }

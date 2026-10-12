@@ -14,8 +14,8 @@ static void fill_artwork(void)
 {
     for (int y = 0; y < PROTOCOL_ARTWORK_SIDE; ++y) {
         for (int x = 0; x < PROTOCOL_ARTWORK_SIDE; ++x) {
-            const int r = 40 + x, g = 60 + y / 2, b = 200 - (x + y) / 3;
-            const bool square = x > 50 && x < 110 && y > 50 && y < 110;
+            const int r = 30 + x * 9 / 10, g = 60 + y / 3, b = 230 - (x + y) * 2 / 5;
+            const bool square = x > 80 && x < 160 && y > 80 && y < 160;
             artwork[y * PROTOCOL_ARTWORK_SIDE + x] = square ? 0xFFDF
                 : (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
         }
@@ -42,7 +42,7 @@ static void flush(lv_display_t *display, const lv_area_t *area, uint8_t *map)
 int main(int argc, char **argv)
 {
     if (argc != 2 && argc != 3) {
-        fputs("Usage: ui-preview output.ppm [long-text|zero-duration|waiting|no-media|mismatch|artwork|artwork-long]\n", stderr);
+        fputs("Usage: ui-preview output.ppm [long-text|zero-duration|waiting|no-media|mismatch|artwork|artwork-text]\n", stderr);
         return 2;
     }
     lv_init();
@@ -71,20 +71,16 @@ int main(int argc, char **argv)
             fixture.playback = PLAYBACK_NO_MEDIA;
         } else if (strcmp(argv[2], "mismatch") == 0) {
             fixture.link = LINK_PROTOCOL_MISMATCH;
-        } else if (strcmp(argv[2], "artwork") == 0 || strcmp(argv[2], "artwork-long") == 0) {
+        } else if (strcmp(argv[2], "artwork") == 0 || strcmp(argv[2], "artwork-text") == 0) {
+            /* Same track with a cover; the view decides what the screen shows. */
             fill_artwork();
             fixture.artwork = true;
             fixture.artwork_version = 1;
+            fixture.view = strcmp(argv[2], "artwork") == 0 ? VIEW_ARTWORK : VIEW_TEXT;
             snprintf(fixture.title, sizeof(fixture.title), "The Less I Know The Better");
             snprintf(fixture.artist, sizeof(fixture.artist), "Tame Impala");
             fixture.position_ms = 81000;
             fixture.duration_ms = 216000;
-            if (strcmp(argv[2], "artwork-long") == 0) {
-                memset(fixture.title, 'W', sizeof(fixture.title) - 1);
-                memset(fixture.artist, 'W', sizeof(fixture.artist) - 1);
-                fixture.playback = PLAYBACK_PAUSED;
-                fixture.muted = true;
-            }
         } else {
             return 2;
         }

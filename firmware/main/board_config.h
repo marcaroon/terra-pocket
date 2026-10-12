@@ -49,6 +49,8 @@
 /* Reverse this sign if the physical knob logs the opposite direction. */
 #define BOARD_ENCODER_DIRECTION  1
 #define BOARD_VOLUME_STEP        2
+/* Encoder push: shorter is mute (sent on release), this long switches the view. */
+#define BOARD_LONG_PRESS_MS      600
 
 /* 1 = boot into the wiring pin scanner (diag/pin_scan.c) instead of the app. */
 #define BOARD_DIAG_PIN_SCAN      0

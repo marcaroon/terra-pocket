@@ -14,7 +14,7 @@ static protocol_artwork_chunk_t chunk(uint32_t id, uint32_t offset, size_t lengt
 
 static artwork_rx_status_t send_all(artwork_rx_t *rx, uint32_t id, size_t size, size_t piece)
 {
-    const protocol_artwork_begin_t begin = {id, PROTOCOL_ARTWORK_JPEG, 160, 160, (uint32_t)size};
+    const protocol_artwork_begin_t begin = {id, PROTOCOL_ARTWORK_JPEG, PROTOCOL_ARTWORK_SIDE, PROTOCOL_ARTWORK_SIDE, (uint32_t)size};
     artwork_rx_status_t status = artwork_rx_begin(rx, &begin);
     for (size_t offset = 0; status == ARTWORK_RX_CONTINUE && offset < size; offset += piece) {
         const size_t n = size - offset < piece ? size - offset : piece;
@@ -41,11 +41,11 @@ int main(void)
 
     /* Clear and capacity. */
     assert(artwork_rx_begin(&rx, &(protocol_artwork_begin_t){0}) == ARTWORK_RX_CLEARED && !rx.active);
-    const protocol_artwork_begin_t huge = {7, PROTOCOL_ARTWORK_JPEG, 160, 160, sizeof(buffer) + 1};
+    const protocol_artwork_begin_t huge = {7, PROTOCOL_ARTWORK_JPEG, PROTOCOL_ARTWORK_SIDE, PROTOCOL_ARTWORK_SIDE, sizeof(buffer) + 1};
     assert(artwork_rx_begin(&rx, &huge) == ARTWORK_RX_TOO_LARGE && !rx.active);
 
     /* Chunks must continue the current transfer exactly. */
-    const protocol_artwork_begin_t begin = {9, PROTOCOL_ARTWORK_JPEG, 160, 160, 100};
+    const protocol_artwork_begin_t begin = {9, PROTOCOL_ARTWORK_JPEG, PROTOCOL_ARTWORK_SIDE, PROTOCOL_ARTWORK_SIDE, 100};
     protocol_artwork_chunk_t c = chunk(9, 0, 50);
     assert(artwork_rx_begin(&rx, &begin) == ARTWORK_RX_CONTINUE && artwork_rx_chunk(&rx, &c) == ARTWORK_RX_CONTINUE);
     c = chunk(9, 60, 10); /* gap */

@@ -127,7 +127,8 @@ for name, data in (("artwork_begin_jpeg", p.encode_artwork_begin(0x1234ABCD, 987
 for name, data, note in (
         ("artwork_begin_too_large", p.encode_artwork_begin(1, p.ARTWORK_MAX_BYTES + 1), "32769 bytes"),
         ("artwork_begin_png", p.encode_artwork_begin(1, 100, fmt=2), "format 2"),
-        ("artwork_begin_161", p.encode_artwork_begin(1, 100, width=161), "not 160x160"),
+        ("artwork_begin_160", p.encode_artwork_begin(1, 100, width=160, height=160), "not 240x240"),
+        ("artwork_begin_241", p.encode_artwork_begin(1, 100, width=241), "not 240x240"),
         ("artwork_begin_zero_id", p.encode_artwork_begin(0, 100), "id 0 with data"),
         ("artwork_begin_clear_with_id", p.encode_artwork_begin(7, 0, 0, 0, 0), "clear must be all zero"),
         ("artwork_begin_reserved", p.encode_artwork_begin(1, 100, reserved=1), "reserved byte"),

@@ -84,7 +84,7 @@ static void receive(uint8_t type, const uint8_t *payload, size_t length) {
 }
 static void artwork_begin(uint32_t id, size_t size) {
     uint8_t payload[16];
-    const protocol_artwork_begin_t begin = {id, PROTOCOL_ARTWORK_JPEG, 160, 160, (uint32_t)size};
+    const protocol_artwork_begin_t begin = {id, PROTOCOL_ARTWORK_JPEG, PROTOCOL_ARTWORK_SIDE, PROTOCOL_ARTWORK_SIDE, (uint32_t)size};
     receive(PROTOCOL_MSG_ARTWORK_BEGIN, payload, protocol_encode_artwork_begin(&begin, payload, sizeof(payload)));
 }
 static void artwork_chunks(uint32_t id, const uint8_t *jpeg, size_t from, size_t to) {
