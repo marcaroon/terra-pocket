@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — M10 aplikasi companion (2026-10-12)
+
+- `companion/app`: Tauri 2 (crate 2.11) + React 19 + TypeScript. Jendela
+  menampilkan perangkat, status link dan jeda retry, Now Playing, volume,
+  Auto Connect, Start with Windows, firmware/protocol/companion; tombol Reconnect.
+- Tray: status, Open, Reconnect, Exit; menutup jendela menyembunyikannya ke tray.
+  Start with Windows memakai `tauri-plugin-autostart` (`--minimized`), satu
+  instance lewat `tauri-plugin-single-instance`. Auto Connect disimpan di
+  `settings.json` di folder konfigurasi aplikasi.
+- `companion-core`: sesi melaporkan `Update` terstruktur (log, `Phase`, media,
+  volume) dan menerima `Control` stop/reconnect; `run_forever` mengembalikan
+  `Exit`. Keluaran CLI tidak berubah.
+- CI: job `app` (npm ci, build Tauri debug, tes pemetaan status).
+
 ## Unreleased — M9 keandalan (2026-10-12)
 
 - `connect`/`monitor` tidak lagi berhenti saat link putus: sesi diulang dengan

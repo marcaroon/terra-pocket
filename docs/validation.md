@@ -1,5 +1,34 @@
 # Laporan validasi
 
+## M10 aplikasi companion — 12 Oktober 2026
+
+**Compile verified / software tested:** frontend `tsc --noEmit` strict dan
+`vite build` lulus; `src-tauri` dibangun dengan toolchain Rust GNU lokal tanpa
+warning (`tauri` 2.11.6, `@tauri-apps/api` 2.11.1); 2 tes pemetaan status lulus;
+19 tes workspace companion lulus, termasuk `Control` stop/reconnect.
+
+**Hardware tested oleh pengembang:** `terra-companion.exe` (debug) dijalankan
+dengan Auto Connect bawaan; UART 22:27:38–22:27:40 mencatat connect, HELLO,
+`HELLO_ACK companion=0.1.0`, lagu Chrome dan `Volume 8` dari aplikasi. Peluncuran
+kedua keluar dengan kode 0 dan instance pertama tetap berjalan (single instance).
+
+**Uji pengguna 22.27–22.31 (aplikasi debug):** pengguna menjalankan seluruh
+[m10-test.md](m10-test.md) kecuali restart Windows dan melaporkan sesuai. Bukti UART:
+
+- Encoder diputar cepat bolak-balik (±90 klik): setiap `MEDIA_COMMAND 4 ±2`
+  diikuti nilai yang konsisten (8 → 4 → 20 → 10 → 22 → 12).
+- Tray → Reconnect 22:30:22: link ditutup aplikasi dan READY lagi 22:30:25 (3 s).
+- Auto Connect off 22:30:34: link langsung diputus, tidak ada percobaan ulang;
+  on: READY 22:30:47 tanpa restart aplikasi.
+- Start with Windows menulis `HKCU\…\Run\Terra = …\terra-companion.exe --minimized`;
+  `settings.json` menyimpan `autoConnect`.
+
+**Build release:** `npx tauri build --no-bundle` lulus (GNU, 6 m 53 s); exe release
+bersubsistem GUI (2), debug console (3). Entri startup dari aplikasi debug akan
+membuka console saat login; uji restart memakai exe release.
+
+**Belum diuji:** start otomatis setelah restart/sign-in Windows, dan installer NSIS.
+
 ## M9 keandalan — 12 Oktober 2026
 
 **Software:** companion `connect`/`monitor` menjalankan sesi berulang dengan

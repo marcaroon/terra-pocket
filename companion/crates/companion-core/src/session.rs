@@ -3,14 +3,17 @@
 //! (M6–M8). `run_forever` reconnects with bounded backoff after any loss (M9).
 
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use audio_windows::{AudioError, MasterVolume, VolumeLevel};
+use audio_windows::{AudioError, MasterVolume};
+pub use audio_windows::VolumeLevel;
+pub use protocol::{MediaState, Playback};
 use ble_windows::{BleError, Link, LinkEvent};
 use media_windows::{ControlCommand, ControlOutcome, MediaError, MediaReader, MediaSnapshot, Playback as WinPlayback};
 use protocol::{
-    DeviceStatus, ErrorReport, Hello, HelloAck, MediaCommand, MediaState, MessageType, Reassembler, VERSION,
+    DeviceStatus, ErrorReport, Hello, HelloAck, MediaCommand, MessageType, Reassembler, VERSION,
     VolumeState, fragment,
 };
 
@@ -79,6 +82,82 @@ impl From<AudioError> for SessionError {
 pub struct SessionOptions {
     pub address: Option<u64>,
     pub scan_timeout: Duration,
+}
+
+/// Where the link stands, for frontends (spec §29 companion states).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Phase {
+    Scanning,
+    Connecting { address: u64 },
+    Ready { address: u64, firmware: (u8, u8, u8), protocol: u8 },
+    /// Disconnected; the next attempt starts after `retry_in_s`.
+    Waiting { retry_in_s: u64 },
+    Stopped,
+    Mismatch { device_version: u8 },
+}
+
+/// Everything a session reports. The CLI prints `Log`; a GUI also uses the rest.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Update {
+    Log(String),
+    Phase(Phase),
+    /// MEDIA_STATE as last sent to Terra.
+    Media(MediaState),
+    /// VOLUME_STATE as last sent; `None` when Windows has no playback device.
+    Volume(Option<VolumeLevel>),
+}
+
+/// Wraps the frontend callback.
+pub struct Reporter<F: FnMut(Update)>(pub F);
+
+impl<F: FnMut(Update)> Reporter<F> {
+    fn log(&mut self, line: String) {
+        (self.0)(Update::Log(line));
+    }
+
+    fn update(&mut self, update: Update) {
+        (self.0)(update);
+    }
+}
+
+/// Requests from a frontend to a running `run_forever`, checked at least once
+/// per second while connected and every 100 ms while waiting to reconnect.
+#[derive(Debug, Default)]
+pub struct Control {
+    stop: AtomicBool,
+    reconnect: AtomicBool,
+}
+
+impl Control {
+    /// Ends the current session and `run_forever`.
+    pub fn stop(&self) {
+        self.stop.store(true, Ordering::SeqCst);
+    }
+
+    /// Ends the current session or wait and starts a new attempt immediately.
+    pub fn reconnect(&self) {
+        self.reconnect.store(true, Ordering::SeqCst);
+    }
+
+    fn stopped(&self) -> bool {
+        self.stop.load(Ordering::SeqCst)
+    }
+
+    fn interrupted(&self) -> bool {
+        self.stopped() || self.reconnect.load(Ordering::SeqCst)
+    }
+
+    fn take_reconnect(&self) -> bool {
+        self.reconnect.swap(false, Ordering::SeqCst)
+    }
+}
+
+/// Why `run_forever` returned.
+#[derive(Debug)]
+pub enum Exit {
+    Stopped,
+    /// Retrying cannot fix this without updating the firmware or companion.
+    Mismatch(SessionError),
 }
 
 /// What one session leaves for the next reconnect attempt.
@@ -240,14 +319,14 @@ impl MediaSync<'_> {
     /// Sends MEDIA_STATE when it changed meaningfully. Returns when to read
     /// again without a Windows event: after a failed read, or when a pending
     /// NO_MEDIA has waited out its grace period.
-    fn sync(&mut self, sender: &mut Sender, log: &mut impl FnMut(String)) -> Result<Option<Instant>, SessionError> {
+    fn sync(&mut self, sender: &mut Sender, out: &mut Reporter<impl FnMut(Update)>) -> Result<Option<Instant>, SessionError> {
         if let Err(error) = self.watch.sync() {
-            log(format!("[WARN] media resubscribe failed: {error}"));
+            out.log(format!("[WARN] media resubscribe failed: {error}"));
         }
         let snapshot = match self.reader.current() {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                log(format!("[WARN] media read failed: {error}"));
+                out.log(format!("[WARN] media read failed: {error}"));
                 return Ok(Some(Instant::now() + MEDIA_RETRY));
             }
         };
@@ -266,7 +345,8 @@ impl MediaSync<'_> {
         }
         let payload = state.encode().map_err(|_| SessionError::Protocol("MEDIA_STATE encode"))?;
         sender.send(MessageType::MediaState, &payload)?;
-        log(format!("[MEDIA] {}", describe(&state)));
+        out.log(format!("[MEDIA] {}", describe(&state)));
+        out.update(Update::Media(state.clone()));
         self.last = Some((state, Instant::now()));
         Ok(None)
     }
@@ -288,17 +368,18 @@ struct VolumeSync {
 impl VolumeSync {
     /// Sends VOLUME_STATE when the level Windows reports differs from the last
     /// one sent. Audio read failures are logged; they never end the session.
-    fn sync(&mut self, sender: &mut Sender, log: &mut impl FnMut(String)) -> Result<(), SessionError> {
+    fn sync(&mut self, sender: &mut Sender, out: &mut Reporter<impl FnMut(Update)>) -> Result<(), SessionError> {
         let level = match self.audio.refresh().and_then(|_| self.audio.level()) {
             Ok(level) => level,
             Err(error) => {
-                log(format!("[WARN] volume read failed: {error}"));
+                out.log(format!("[WARN] volume read failed: {error}"));
                 return Ok(());
             }
         };
         let Some(level) = level else {
             if self.last.take().is_some() {
-                log("[VOLUME] no playback device; Terra keeps the last level".into());
+                out.log("[VOLUME] no playback device; Terra keeps the last level".into());
+                out.update(Update::Volume(None));
             }
             return Ok(());
         };
@@ -309,7 +390,8 @@ impl VolumeSync {
             .encode()
             .map_err(|_| SessionError::Protocol("VOLUME_STATE encode"))?;
         sender.send(MessageType::VolumeState, &payload)?;
-        log(format!("[VOLUME] {}", describe_volume(level)));
+        out.log(format!("[VOLUME] {}", describe_volume(level)));
+        out.update(Update::Volume(Some(level)));
         self.last = Some(level);
         Ok(())
     }
@@ -326,36 +408,58 @@ fn now_ms(start: Instant) -> u32 {
     start.elapsed().as_millis() as u32
 }
 
-/// Runs sessions until a protocol mismatch, which is returned: retrying cannot
-/// fix it without updating the firmware or companion. Every other end of a
+/// Runs sessions until stopped or a protocol mismatch. Every other end of a
 /// session (disconnect, Bluetooth off, device gone, Windows API failure) is
 /// logged and followed by a reconnect after a bounded backoff (spec §29).
-pub fn run_forever(options: &SessionOptions, mut log: impl FnMut(String)) -> SessionError {
+pub fn run_forever(options: &SessionOptions, control: &Control, report: impl FnMut(Update)) -> Exit {
+    let mut out = Reporter(report);
     let mut memory = Memory::default();
     let mut backoff = Backoff::default();
     loop {
-        match run(options, &mut memory, &mut log) {
-            Err(error @ SessionError::ProtocolMismatch { .. }) => return error,
-            Err(error) => log(format!("[ERROR] {error}")),
+        if control.stopped() {
+            out.update(Update::Phase(Phase::Stopped));
+            return Exit::Stopped;
+        }
+        control.take_reconnect();
+        match run(options, &mut memory, control, &mut out) {
+            Err(SessionError::ProtocolMismatch { device_version }) => {
+                out.update(Update::Phase(Phase::Mismatch { device_version }));
+                return Exit::Mismatch(SessionError::ProtocolMismatch { device_version });
+            }
+            Err(error) => out.log(format!("[ERROR] {error}")),
             Ok(()) => {}
         }
-        if memory.ready {
+        if control.stopped() {
+            continue;
+        }
+        if memory.ready || control.take_reconnect() {
             backoff.reset();
         }
         let delay = backoff.next_delay_s();
-        log(format!("[BLE] reconnecting in {delay} s"));
-        std::thread::sleep(Duration::from_secs(delay));
+        out.log(format!("[BLE] reconnecting in {delay} s"));
+        out.update(Update::Phase(Phase::Waiting { retry_in_s: delay }));
+        let until = Instant::now() + Duration::from_secs(delay);
+        while Instant::now() < until && !control.interrupted() {
+            std::thread::sleep(Duration::from_millis(100));
+        }
     }
 }
 
-/// Runs one session until the link drops (returns `Ok`) or an error stops it.
-pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(String)) -> Result<(), SessionError> {
+/// Runs one session until the link drops or `control` interrupts it (returns
+/// `Ok`), or an error stops it.
+fn run(
+    options: &SessionOptions,
+    memory: &mut Memory,
+    control: &Control,
+    out: &mut Reporter<impl FnMut(Update)>,
+) -> Result<(), SessionError> {
     memory.ready = false;
     let reader = MediaReader::new()?;
     let address = match options.address {
         Some(address) => address,
         None => {
-            log("[BLE] scanning for Terra".into());
+            out.log("[BLE] scanning for Terra".into());
+            out.update(Update::Phase(Phase::Scanning));
             let preferred = memory.address;
             let found = ble_windows::scan_until(options.scan_timeout, |found| {
                 preferred.is_some_and(|address| found.iter().any(|f| f.address == address))
@@ -365,10 +469,14 @@ pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(St
                 .find(|f| Some(f.address) == preferred)
                 .or_else(|| found.iter().max_by_key(|f| f.rssi))
                 .ok_or(SessionError::NotFound)?;
-            log(format!("[BLE] found {} {} RSSI {} dBm", device.name, device.address_text(), device.rssi));
+            out.log(format!("[BLE] found {} {} RSSI {} dBm", device.name, device.address_text(), device.rssi));
             device.address
         }
     };
+    if control.interrupted() {
+        return Ok(());
+    }
+    out.update(Update::Phase(Phase::Connecting { address }));
 
     let (tx, rx) = mpsc::channel::<Event>();
     let link_tx = tx.clone();
@@ -376,7 +484,7 @@ pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(St
         let _ = link_tx.send(Event::Link(event));
     })?;
     memory.address = Some(address);
-    log(format!("[BLE] connected, packet size {} bytes", link.max_packet()));
+    out.log(format!("[BLE] connected, packet size {} bytes", link.max_packet()));
 
     let start = Instant::now();
     let mut reassembler = Reassembler::new();
@@ -401,7 +509,7 @@ pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(St
         }
     };
     let (major, minor, patch) = hello.firmware;
-    log(format!("[PROTOCOL] HELLO protocol={} firmware={major}.{minor}.{patch}", hello.protocol_version));
+    out.log(format!("[PROTOCOL] HELLO protocol={} firmware={major}.{minor}.{patch}", hello.protocol_version));
     let companion = crate::version_triple();
     let accepted = hello.protocol_version == VERSION;
     let ack = HelloAck { protocol_version: VERSION, companion, accepted };
@@ -410,9 +518,10 @@ pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(St
         return Err(SessionError::ProtocolMismatch { device_version: hello.protocol_version });
     }
     memory.ready = true;
+    out.update(Update::Phase(Phase::Ready { address, firmware: hello.firmware, protocol: hello.protocol_version }));
     if let Ok(status) = link.read_status().map(|bytes| DeviceStatus::decode(&bytes)) {
         if let Ok(status) = status {
-            log(format!("[PROTOCOL] device link state {:?}, rx_errors {}", status.link, status.rx_errors));
+            out.log(format!("[PROTOCOL] device link state {:?}, rx_errors {}", status.link, status.rx_errors));
         }
     }
 
@@ -427,35 +536,39 @@ pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(St
     let mut media = MediaSync { reader: &reader, watch, last: None, absent_since: None };
     let mut volume = VolumeSync { audio, last: None };
     let mut pending = Pending::default();
-    schedule(&mut pending.media, media.sync(&mut sender, &mut log)?);
-    volume.sync(&mut sender, &mut log)?;
+    schedule(&mut pending.media, media.sync(&mut sender, out)?);
+    volume.sync(&mut sender, out)?;
 
     let mut polled = Instant::now();
     loop {
+        if control.interrupted() {
+            out.log("[BLE] disconnecting on request".into());
+            return Ok(());
+        }
         if polled.elapsed() >= DEVICE_POLL {
             polled = Instant::now();
-            volume.sync(&mut sender, &mut log)?; // follows a changed default playback device
+            volume.sync(&mut sender, out)?; // follows a changed default playback device
         }
         match next_event(&rx, &mut pending) {
             Ok(Event::MediaChanged) => {
-                schedule(&mut pending.media, media.sync(&mut sender, &mut log)?);
+                schedule(&mut pending.media, media.sync(&mut sender, out)?);
             }
             Ok(Event::VolumeChanged) => {
-                volume.sync(&mut sender, &mut log)?;
+                volume.sync(&mut sender, out)?;
             }
             Ok(Event::Link(LinkEvent::Packet(packet))) => {
                 let result = reassembler.push(&packet, now_ms(start));
                 if result.drops.0 != 0 {
-                    log(format!("[WARN] notification dropped (reasons 0x{:02x})", result.drops.0));
+                    out.log(format!("[WARN] notification dropped (reasons 0x{:02x})", result.drops.0));
                 }
                 let Some(message) = result.message else { continue };
                 match MessageType::from_u8(message.message_type) {
                     Some(MessageType::Error) => match ErrorReport::decode(&message.payload) {
-                        Ok(error) => log(format!(
+                        Ok(error) => out.log(format!(
                             "[DEVICE] rejected type 0x{:02x} seq {} (error {})",
                             error.related_type, error.related_seq, error.code
                         )),
-                        Err(_) => log("[WARN] malformed ERROR from device".into()),
+                        Err(_) => out.log("[WARN] malformed ERROR from device".into()),
                     },
                     Some(MessageType::Hello) => {
                         // The device restarts the handshake after a TX re-subscribe.
@@ -469,9 +582,9 @@ pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(St
                         reassembler.reset();
                         media.last = None;
                         volume.last = None;
-                        log("[PROTOCOL] HELLO again; acknowledged".into());
-                        schedule(&mut pending.media, media.sync(&mut sender, &mut log)?);
-                        volume.sync(&mut sender, &mut log)?;
+                        out.log("[PROTOCOL] HELLO again; acknowledged".into());
+                        schedule(&mut pending.media, media.sync(&mut sender, out)?);
+                        volume.sync(&mut sender, out)?;
                     }
                     Some(MessageType::MediaCommand) => {
                         let mut media_request = false;
@@ -483,24 +596,24 @@ pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(St
                             },
                             |request| volume.execute(request),
                         );
-                        log(line);
+                        out.log(line);
                         // Report what Windows actually has afterwards; never echo the request.
                         if media_request {
                             pending.media.get_or_insert_with(|| Instant::now() + SETTLE);
                         } else {
-                            volume.sync(&mut sender, &mut log)?;
+                            volume.sync(&mut sender, out)?;
                         }
                     }
-                    other => log(format!("[WARN] unexpected message {other:?} from device")),
+                    other => out.log(format!("[WARN] unexpected message {other:?} from device")),
                 }
             }
             Ok(Event::Link(LinkEvent::Disconnected)) => {
-                log("[BLE] disconnected".into());
+                out.log("[BLE] disconnected".into());
                 return Ok(());
             }
             Err(RecvTimeoutError::Timeout) => {
                 if !link.is_connected() {
-                    log("[BLE] disconnected".into());
+                    out.log("[BLE] disconnected".into());
                     return Ok(());
                 }
             }
@@ -539,6 +652,24 @@ mod tests {
         assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::VolumeChanged));
         assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::MediaChanged));
         assert!(pending.media.is_none() && pending.volume.is_none());
+    }
+
+    #[test]
+    fn control_requests() {
+        let control = Control::default();
+        assert!(!control.interrupted());
+        control.reconnect();
+        assert!(control.interrupted() && !control.stopped());
+        assert!(control.take_reconnect());
+        assert!(!control.take_reconnect(), "a reconnect request is consumed once");
+        assert!(!control.interrupted());
+        control.stop();
+        assert!(control.interrupted() && control.stopped());
+        let mut updates = Vec::new();
+        let options = SessionOptions { address: None, scan_timeout: Duration::from_millis(1) };
+        // A stopped control returns before touching Bluetooth or Windows media.
+        assert!(matches!(run_forever(&options, &control, |u| updates.push(u)), Exit::Stopped));
+        assert_eq!(updates, [Update::Phase(Phase::Stopped)]);
     }
 
     #[test]

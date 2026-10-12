@@ -12,3 +12,5 @@ companion/app/dist/
 *.log
 .DS_Store
 __pycache__/
+companion/app/src-tauri/target/
+companion/app/src-tauri/gen/

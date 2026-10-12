@@ -1,4 +1,4 @@
-# Arsitektur — M9
+# Arsitektur — M10
 
 ## Firmware ESP32-S3
 
@@ -36,6 +36,7 @@ NTFS driver, operasi tulis, atau file server. Power HDD belum terverifikasi.
 | companion-core | Handshake, sinkronisasi bermakna, routing command; tidak memiliki UI |
 | audio-windows | Core Audio `IAudioEndpointVolume`: perangkat output default, baca/step/mute, callback perubahan |
 | companion-cli | media, media --watch, volume, volume --watch, devices, connect, monitor |
+| app (Tauri 2) | Jendela React + tray; memanggil `run_forever` lewat thread, `Control` stop/reconnect, event `status` |
 
 `connect`/`monitor`: scan atau alamat eksplisit → discovery → subscribe TX →
 HELLO/ACK → sinkronisasi. Event GSMTC digabung 150 ms tanpa membuang paket BLE
@@ -73,5 +74,13 @@ sudah aktif. HDD tidak diformat atau ditulis.
 Bukti dan sisa pemeriksaan M0–M6 ada di [validation.md](validation.md).
 M7 harus melewati [uji tombol](m7-test.md) sebelum diterima penuh.
 M8 volume harus melewati [uji volume](m8-test.md), M9 [uji keandalan](m9-test.md).
-Selanjutnya M10 GUI/tray. Wire format mengikuti
+M10 aplikasi: [uji aplikasi](m10-test.md).
+
+Aplikasi M10 (`companion/app`) tidak berisi logika BLE/media/audio. Sesi
+melaporkan `Update` (log, fase link, MEDIA_STATE dan VOLUME_STATE yang terkirim);
+`src-tauri/status.rs` melipatnya menjadi status jendela/tray dan memancarkan
+event `status`. React hanya memanggil command dan menampilkan status. Setiap
+thread sesi punya nomor generasi; update dari sesi yang sedang dihentikan
+diabaikan. Satu instance dijaga plugin single-instance; startup Windows memakai
+entri per pengguna dari plugin autostart dengan argumen `--minimized`. Wire format mengikuti
 [ble-protocol.md](ble-protocol.md), bukan asumsi dari mock UI.

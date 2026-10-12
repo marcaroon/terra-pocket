@@ -18,14 +18,15 @@ Windows. Spesifikasi lengkap: [PROJECT_SPEC.md](PROJECT_SPEC.md).
 | M7 | Previous / Play-Pause / Next fisik → sesi Windows aktif | Diuji di hardware tanpa diagnostik (Chrome): Play/Pause 8/8, Previous 4/4, Next 4/4, satu command per tekanan. Kasus tepi di [uji M7](docs/m7-test.md) belum diulang |
 | M8 | Encoder volume/mute ↔ master volume Windows (Core Audio) | Diuji di hardware: 12/12 klik encoder dan 4/4 mute sampai Windows dan kembali ke perangkat; perubahan dari Windows sampai ke perangkat. Menunggu konfirmasi visual LCD dan ganti perangkat output; lihat [uji M8](docs/m8-test.md) |
 | M9 | Reconnect otomatis dengan backoff, pemulihan BLE, perpindahan aplikasi media | Diuji di hardware: Bluetooth off/on, ESP restart, sleep/wake, Chrome ↔ Spotify, companion mati/dijalankan ulang; pulih tanpa restart. Lihat [validasi](docs/validation.md) |
-| M10 | GUI Tauri, tray, autostart | Belum dimulai |
+| M10 | Aplikasi Tauri 2 + React: status, tray, auto connect, start with Windows | Diuji pengguna: jendela, tray, close-to-tray, Reconnect (3 s), Auto Connect off/on, satu instance, entri startup. Sisa: start otomatis setelah restart Windows (exe release); lihat [uji M10](docs/m10-test.md) |
 
 Wire format: [ble-protocol.md](docs/ble-protocol.md). Pemakaian sekarang: putar musik di
 Windows, lalu jalankan `companion\target\debug\terra-cli.exe connect` (atau `monitor`).
 Firmware **0.4.0** mengirim tombol Previous, Play/Pause, Next serta encoder volume (±2)
 dan mute ketika link READY; companion menjalankannya di Windows dan mengirim balik
 volume aktual (`terra-cli volume` membaca volume saja). `connect` terus berjalan dan
-menyambung ulang sendiri setelah koneksi putus (M9).
+menyambung ulang sendiri setelah koneksi putus (M9). Sebagai alternatif CLI, aplikasi
+[Terra companion](companion/app/README.md) (M10) menampilkan status dan berjalan di tray.
 
 Layar dari renderer LVGL yang sama, dijalankan di komputer (bukan foto hardware):
 
@@ -82,6 +83,7 @@ pengujian, dan flash. Jangan flash sebelum memeriksa [wiring](docs/wiring.md).
 - [Uji tombol M7](docs/m7-test.md)
 - [Uji volume M8](docs/m8-test.md)
 - [Uji keandalan M9](docs/m9-test.md)
+- [Uji aplikasi M10](docs/m10-test.md)
 - [Changelog](CHANGELOG.md)
 - [Proposal NAS dan Vercel](docs/nas-proposal.md)
 - [Uji input M2 dan diagnostik disk N0](docs/m2-n0-test.md)

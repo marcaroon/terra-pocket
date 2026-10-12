@@ -207,7 +207,7 @@ fn parse_address_text(text: &str) -> Option<u64> {
 
 #[cfg(windows)]
 mod ble {
-    use companion_core::session::{SessionOptions, run_forever};
+    use companion_core::session::{Control, Exit, SessionOptions, Update, run_forever};
     use std::process::ExitCode;
     use std::time::Duration;
 
@@ -237,10 +237,19 @@ mod ble {
 
     pub fn connect(address: Option<u64>) -> ExitCode {
         let options = SessionOptions { address, scan_timeout: Duration::from_secs(10) };
-        // Returns only on a protocol mismatch; everything else is retried.
-        let error = run_forever(&options, |line| println!("{line}"));
-        eprintln!("{error}");
-        ExitCode::from(3)
+        let print = |update| {
+            if let Update::Log(line) = update {
+                println!("{line}");
+            }
+        };
+        // Nothing calls stop here, so only a protocol mismatch returns.
+        match run_forever(&options, &Control::default(), print) {
+            Exit::Mismatch(error) => {
+                eprintln!("{error}");
+                ExitCode::from(3)
+            }
+            Exit::Stopped => ExitCode::SUCCESS,
+        }
     }
 }
 

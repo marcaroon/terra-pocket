@@ -81,5 +81,22 @@ jobs:
           & ./target/debug/terra-cli.exe devices
           if ($LASTEXITCODE -gt 1) { throw "devices exited $LASTEXITCODE" }
           & ./target/debug/terra-cli.exe monitor invalid-address
+  app:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: companion/app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build the Tauri app (frontend type check included)
+        run: npx tauri build --debug --no-bundle
+      - name: Test app status mapping
+        working-directory: companion/app/src-tauri
+        run: cargo test --locked
           if ($LASTEXITCODE -ne 2) { throw 'Invalid monitor address must exit 2' }
           exit 0

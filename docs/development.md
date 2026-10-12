@@ -176,6 +176,13 @@ Sejak M8 baris `[VOLUME] NN` muncul setelah handshake dan LCD menampilkan
 lain yang terhubung ke Terra lebih dulu. Exit code `connect`: 0 setelah disconnect,
 1 gagal (tidak ditemukan, BLE/GATT error), 3 versi protokol tidak cocok.
 
+## Aplikasi companion (M10)
+
+Lihat [companion/app/README.md](../companion/app/README.md) untuk build dan
+[m10-test.md](m10-test.md) untuk penerimaan. Pada laptop pengembangan, Tauri
+dibangun dengan toolchain Rust GNU lokal (`scripts/activate-local.ps1`); CI
+memakai runner Windows standar (MSVC).
+
 ## Referensi API
 
 - [esp_lvgl_port 2.9.0](https://components.espressif.com/components/espressif/esp_lvgl_port/versions/2.9.0/readme)
