@@ -1,0 +1,8 @@
+{
+  "name": "artwork_begin_clear_with_id",
+  "kind": "artwork_begin",
+  "expect": "malformed",
+  "note": "clear must be all zero",
+  "bytes": "0700000000000000000000000000",
+  "fields": []
+}

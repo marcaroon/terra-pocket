@@ -1,6 +1,7 @@
 /* Exercise the production transport with a fake scheduler/radio, not fake protocol logic. */
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "../main/ble/ble_transport.c"
 
 static transport_event_t queue[EVENT_QUEUE_DEPTH];
@@ -50,6 +51,21 @@ void app_state_snapshot(media_state_t *out) { memset(out, 0, sizeof(*out)); }
 void app_state_apply_media(const protocol_media_state_t *media, uint32_t now) { (void)media; (void)now; }
 void app_state_apply_volume(const protocol_volume_t *volume) { (void)volume; }
 
+/* V2 artwork seams: PSRAM is plain heap; the JPEG decoder is the ROM's on device. */
+static unsigned artwork_sets, artwork_clears;
+static bool decode_ok = true;
+static size_t expected_jpeg_length;
+void *heap_caps_malloc(size_t size, uint32_t caps) { assert(caps == MALLOC_CAP_SPIRAM); return malloc(size); }
+void heap_caps_free(void *ptr) { free(ptr); }
+bool app_state_artwork_supported(void) { return true; }
+void app_state_set_artwork(const uint16_t *pixels) { assert(pixels[0] == 0x1234); ++artwork_sets; }
+void app_state_clear_artwork(void) { ++artwork_clears; }
+bool artwork_decode_jpeg(const uint8_t *jpeg, size_t length, uint16_t pixels[ARTWORK_PIXELS]) {
+    assert(jpeg != NULL && length == expected_jpeg_length);
+    pixels[0] = 0x1234;
+    return decode_ok;
+}
+
 static void drain(void) {
     transport_event_t event;
     while (xQueueReceive(events, &event, 0)) process_event(&event);
@@ -57,6 +73,40 @@ static void drain(void) {
 static void emit_event(ble_event_type_t type) {
     const ble_event_t event = {.type = type, .conn_handle = 7};
     assert(sink(&event, true)); drain();
+}
+static void receive(uint8_t type, const uint8_t *payload, size_t length) {
+    static uint8_t seq;
+    ble_event_t packet = {.type = BLE_EVENT_PACKET, .conn_handle = 7};
+    assert(protocol_fragment_count(length, 247) == 1);
+    packet.value = (uint16_t)protocol_fragment_build(type, seq++, payload, length, 247, 0,
+                                                     packet.data, sizeof(packet.data));
+    assert(sink(&packet, false)); drain();
+}
+static void artwork_begin(uint32_t id, size_t size) {
+    uint8_t payload[16];
+    const protocol_artwork_begin_t begin = {id, PROTOCOL_ARTWORK_JPEG, 160, 160, (uint32_t)size};
+    receive(PROTOCOL_MSG_ARTWORK_BEGIN, payload, protocol_encode_artwork_begin(&begin, payload, sizeof(payload)));
+}
+static void artwork_chunks(uint32_t id, const uint8_t *jpeg, size_t from, size_t to) {
+    uint8_t payload[PROTOCOL_MAX_MESSAGE];
+    for (size_t offset = from; offset < to; offset += 232) {
+        const size_t n = to - offset < 232 ? to - offset : 232;
+        const protocol_artwork_chunk_t chunk = {id, (uint32_t)offset, (uint16_t)n, jpeg + offset};
+        receive(PROTOCOL_MSG_ARTWORK_CHUNK, payload, protocol_encode_artwork_chunk(&chunk, payload, sizeof(payload)));
+    }
+}
+static void artwork_end(uint32_t id, uint32_t crc) {
+    uint8_t payload[8];
+    const protocol_artwork_end_t end = {id, crc};
+    receive(PROTOCOL_MSG_ARTWORK_END, payload, protocol_encode_artwork_end(&end, payload, sizeof(payload)));
+}
+static void send_artwork(uint32_t id, const uint8_t *jpeg, size_t size, uint32_t crc) {
+    artwork_begin(id, size);
+    artwork_chunks(id, jpeg, 0, size);
+    artwork_end(id, crc);
+}
+static bool last_error(uint8_t code, uint8_t related_type) {
+    return last_packet[1] == PROTOCOL_MSG_ERROR && last_packet[4] == code && last_packet[5] == related_type;
 }
 static void ack(void) {
     const uint8_t payload[] = {1, 0, 1, 0, 0};
@@ -73,11 +123,15 @@ int main(void) {
     emit_event(BLE_EVENT_CONNECTED);
     ack(); /* Cannot become READY before subscribing. */
     assert(link.link == LINK_CONNECTED);
+    const uint16_t errors_before_ready = link.rx_errors;
+    artwork_begin(1, 10); /* artwork only on a READY link */
+    assert(link.rx_errors == errors_before_ready + 1 && !artwork.active);
     emit_event(BLE_EVENT_TX_SUBSCRIBED);
     assert(last_packet[1] == PROTOCOL_MSG_HELLO);
     protocol_hello_t hello;
     assert(protocol_decode_hello(last_packet + 4, last_length - 4, &hello));
     assert(hello.capabilities & PROTOCOL_CAP_MEDIA_COMMAND);
+    assert(hello.capabilities & PROTOCOL_CAP_ARTWORK);
     ack(); assert(link.link == LINK_READY);
     const unsigned before_duplicate = notifications;
     ack();
@@ -112,6 +166,44 @@ int main(void) {
     for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
         assert(ble_transport_send_command(&invalid[i]) == ESP_ERR_INVALID_ARG);
     }
+    /* V2 artwork: a complete transfer is decoded and shown once, silently. */
+    static uint8_t jpeg[600];
+    for (size_t i = 0; i < sizeof(jpeg); ++i) jpeg[i] = (uint8_t)(i * 13 + 1);
+    const uint32_t crc = protocol_crc32(0, jpeg, sizeof(jpeg));
+    expected_jpeg_length = sizeof(jpeg);
+    unsigned before_art = notifications;
+    send_artwork(41, jpeg, sizeof(jpeg), crc);
+    assert(artwork_sets == 1 && notifications == before_art);
+    /* Corruption, an undecodable image and a foreign id are answered, never shown. */
+    send_artwork(42, jpeg, sizeof(jpeg), crc ^ 1);
+    assert(artwork_sets == 1 && last_error(PROTOCOL_ERR_MALFORMED, PROTOCOL_MSG_ARTWORK_END));
+    decode_ok = false;
+    send_artwork(43, jpeg, sizeof(jpeg), crc);
+    assert(artwork_sets == 1 && last_error(PROTOCOL_ERR_MALFORMED, PROTOCOL_MSG_ARTWORK_END));
+    decode_ok = true;
+    artwork_begin(44, sizeof(jpeg));
+    artwork_chunks(45, jpeg, 0, 232);
+    assert(last_error(PROTOCOL_ERR_MALFORMED, PROTOCOL_MSG_ARTWORK_CHUNK) && !artwork.active);
+    /* "No artwork" clears the screen. */
+    const unsigned clears = artwork_clears;
+    uint8_t clear[16];
+    const protocol_artwork_begin_t none = {0};
+    receive(PROTOCOL_MSG_ARTWORK_BEGIN, clear, protocol_encode_artwork_begin(&none, clear, sizeof(clear)));
+    assert(artwork_clears == clears + 1);
+    /* A track change drops the old track's half-received artwork. */
+    artwork_begin(46, sizeof(jpeg));
+    artwork_chunks(46, jpeg, 0, 232);
+    protocol_media_state_t next = {.playback = PROTOCOL_PLAYBACK_PLAYING, .duration_ms = 1000};
+    snprintf(next.title, sizeof(next.title), "Next song");
+    uint8_t media_payload[PROTOCOL_MAX_MESSAGE];
+    receive(PROTOCOL_MSG_MEDIA_STATE, media_payload,
+            protocol_encode_media_state(&next, media_payload, sizeof(media_payload)));
+    assert(!artwork.active && artwork_clears == clears + 2);
+    artwork_chunks(46, jpeg, 232, sizeof(jpeg));
+    assert(last_error(PROTOCOL_ERR_MALFORMED, PROTOCOL_MSG_ARTWORK_CHUNK));
+    send_artwork(47, jpeg, sizeof(jpeg), crc);
+    assert(artwork_sets == 2);
+
     assert(ble_transport_send_command(&command) == ESP_OK);
     const unsigned before_stale = notifications;
     clock_ms += COMMAND_MAX_AGE_MS + 1; drain();
@@ -143,5 +235,5 @@ int main(void) {
     assert(sink(&resubscribe, true)); drain();
     /* Only HELLO, never the command queued before re-subscription. */
     assert(notifications == before_resubscribe + 1 && last_packet[1] == PROTOCOL_MSG_HELLO);
-    puts("PASS BLE transport: handshake, buttons, volume/mute, offline/stale/old-session, queue overflow");
+    puts("PASS BLE transport: handshake, buttons, volume/mute, artwork, offline/stale/old-session, queue overflow");
 }

@@ -34,6 +34,10 @@ typedef struct {
     bool volume_known;
     uint8_t volume;
     bool muted;
+    /* V2: a decoded 160x160 artwork for the current track is available. The
+     * pixels stay in app_state; the version changes whenever they do. */
+    bool artwork;
+    uint32_t artwork_version;
 } media_state_t;
 
 esp_err_t app_state_init(void);
@@ -44,3 +48,12 @@ void app_state_snapshot(media_state_t *out);
 void app_state_set_link(link_state_t link);
 void app_state_apply_media(const protocol_media_state_t *media, uint32_t now_ms);
 void app_state_apply_volume(const protocol_volume_t *volume);
+
+/* Artwork pixels are RGB565, PROTOCOL_ARTWORK_SIDE squared. Setting copies them;
+ * without a PSRAM buffer (allocation failed at init) artwork is never shown. */
+bool app_state_artwork_supported(void);
+void app_state_set_artwork(const uint16_t *pixels);
+void app_state_clear_artwork(void);
+/* Copies the current artwork into `out` and returns true, or returns false
+ * when there is none. */
+bool app_state_copy_artwork(uint16_t *out);

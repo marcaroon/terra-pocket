@@ -1,0 +1,10 @@
+{
+  "name": "crc32_check",
+  "kind": "crc32",
+  "expect": "ok",
+  "note": "CRC-32/ISO-HDLC as in ARTWORK_END",
+  "bytes": "313233343536373839",
+  "fields": [
+    3421780262
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "hello_artwork",
+  "kind": "hello",
+  "expect": "ok",
+  "note": "V2: capability bit3 renders artwork",
+  "bytes": "010005000f00",
+  "fields": [
+    1,
+    0,
+    5,
+    0,
+    15
+  ]
+}

@@ -28,3 +28,6 @@ int xQueueSend(QueueHandle_t queue, const void *item, TickType_t wait);
 int xQueueReceive(QueueHandle_t queue, void *item, TickType_t wait);
 int xTaskCreate(void (*task)(void *), const char *name, unsigned stack, void *arg, unsigned priority, void *handle);
 void vTaskDelay(TickType_t ticks);
+#define MALLOC_CAP_SPIRAM (1 << 10)
+void *heap_caps_malloc(size_t size, uint32_t caps);
+void heap_caps_free(void *ptr);

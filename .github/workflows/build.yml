@@ -39,7 +39,9 @@ jobs:
           /tmp/test-disk
           cc -std=c11 -Wall -Wextra -Werror -I firmware/main firmware/tests/test_protocol.c firmware/main/protocol/protocol.c -o /tmp/test-protocol
           /tmp/test-protocol docs/protocol-test-vectors
-          cc -std=c11 -Wall -Wextra -Werror -I firmware/tests/stubs -I firmware/main firmware/tests/test_ble_transport.c firmware/main/protocol/protocol.c -o /tmp/test-transport
+          cc -std=c11 -Wall -Wextra -Werror -I firmware/tests/stubs -I firmware/main firmware/tests/test_artwork_rx.c firmware/main/artwork/artwork_rx.c firmware/main/protocol/protocol.c -o /tmp/test-artwork
+          /tmp/test-artwork
+          cc -std=c11 -Wall -Wextra -Werror -I firmware/tests/stubs -I firmware/main firmware/tests/test_ble_transport.c firmware/main/protocol/protocol.c firmware/main/artwork/artwork_rx.c -o /tmp/test-transport
           /tmp/test-transport
       - name: Protocol vectors match the Python reference
         run: |

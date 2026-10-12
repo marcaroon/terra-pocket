@@ -98,7 +98,9 @@ bad("command_volume_101", "media_command", p.encode_command(p.VOLUME_DELTA, 101)
 
 data = p.encode_hello(0, 2, 0, 0x0003)
 emit("hello_basic", "hello", "ok", data, p.decode_hello(data))
-bad("hello_bad_caps", "hello", p.encode_hello(0, 2, 0, 0x0008), p.decode_hello, "unknown capability bit")
+data = p.encode_hello(0, 5, 0, p.CAPS_ALL)
+emit("hello_artwork", "hello", "ok", data, p.decode_hello(data), "V2: capability bit3 renders artwork")
+bad("hello_bad_caps", "hello", p.encode_hello(0, 2, 0, 0x0010), p.decode_hello, "unknown capability bit")
 bad("hello_short", "hello", data[:5], p.decode_hello, "five bytes")
 
 for name, payload in (("hello_ack_accepted", p.encode_hello_ack(0, 1, 0)),
@@ -115,6 +117,41 @@ bad("device_status_bad_link", "device_status", p.encode_status(0, 2, 0, 4, 0), p
 data = p.encode_error(5, p.MEDIA_STATE, 7)
 emit("error_not_ready", "error", "ok", data, p.decode_error(data))
 bad("error_bad_code", "error", p.encode_error(0, 0x10, 1), p.decode_error, "code 0")
+
+
+# V2 album artwork (§4.8).
+for name, data in (("artwork_begin_jpeg", p.encode_artwork_begin(0x1234ABCD, 9876)),
+                   ("artwork_begin_max", p.encode_artwork_begin(1, p.ARTWORK_MAX_BYTES)),
+                   ("artwork_begin_clear", p.encode_artwork_clear())):
+    emit(name, "artwork_begin", "ok", data, p.decode_artwork_begin(data))
+for name, data, note in (
+        ("artwork_begin_too_large", p.encode_artwork_begin(1, p.ARTWORK_MAX_BYTES + 1), "32769 bytes"),
+        ("artwork_begin_png", p.encode_artwork_begin(1, 100, fmt=2), "format 2"),
+        ("artwork_begin_161", p.encode_artwork_begin(1, 100, width=161), "not 160x160"),
+        ("artwork_begin_zero_id", p.encode_artwork_begin(0, 100), "id 0 with data"),
+        ("artwork_begin_clear_with_id", p.encode_artwork_begin(7, 0, 0, 0, 0), "clear must be all zero"),
+        ("artwork_begin_reserved", p.encode_artwork_begin(1, 100, reserved=1), "reserved byte"),
+        ("artwork_begin_short", p.encode_artwork_begin(1, 100)[:13], "13 bytes")):
+    bad(name, "artwork_begin", data, p.decode_artwork_begin, note)
+
+chunk_bytes = bytes(range(232))
+for name, data in (("artwork_chunk_basic", p.encode_artwork_chunk(0x1234ABCD, 464, chunk_bytes)),
+                   ("artwork_chunk_last_byte", p.encode_artwork_chunk(9, p.ARTWORK_MAX_BYTES - 1, b"\xd9"))):
+    artwork_id, offset, chunk = p.decode_artwork_chunk(data)
+    emit(name, "artwork_chunk", "ok", data, (artwork_id, offset, hexs(chunk)))
+for name, data, note in (
+        ("artwork_chunk_empty", p.encode_artwork_chunk(1, 0, b""), "no data bytes"),
+        ("artwork_chunk_zero_id", p.encode_artwork_chunk(0, 0, b"x"), "id 0"),
+        ("artwork_chunk_past_max", p.encode_artwork_chunk(1, p.ARTWORK_MAX_BYTES - 1, b"xy"),
+         "ends past 32768")):
+    bad(name, "artwork_chunk", data, p.decode_artwork_chunk, note)
+
+data = p.encode_artwork_end(0x1234ABCD, 0xCBF43926)
+emit("artwork_end_basic", "artwork_end", "ok", data, p.decode_artwork_end(data))
+bad("artwork_end_zero_id", "artwork_end", p.encode_artwork_end(0, 1), p.decode_artwork_end, "id 0")
+bad("artwork_end_short", "artwork_end", data[:7], p.decode_artwork_end, "7 bytes")
+for name, data in (("crc32_check", b"123456789"), ("crc32_empty", b""), ("crc32_chunk", chunk_bytes)):
+    emit(name, "crc32", "ok", data, (p.crc32(data),), "CRC-32/ISO-HDLC as in ARTWORK_END")
 
 
 def packets_blob(packets):

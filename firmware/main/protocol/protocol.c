@@ -155,7 +155,8 @@ size_t protocol_encode_command(const protocol_command_t *in, uint8_t *out, size_
     return 3;
 }
 
-#define PROTOCOL_CAP_ALL (PROTOCOL_CAP_MEDIA_STATE | PROTOCOL_CAP_VOLUME_STATE | PROTOCOL_CAP_MEDIA_COMMAND)
+#define PROTOCOL_CAP_ALL (PROTOCOL_CAP_MEDIA_STATE | PROTOCOL_CAP_VOLUME_STATE | PROTOCOL_CAP_MEDIA_COMMAND \
+                          | PROTOCOL_CAP_ARTWORK)
 
 bool protocol_decode_hello(const uint8_t *data, size_t length, protocol_hello_t *out)
 {
@@ -235,6 +236,94 @@ size_t protocol_encode_error(const protocol_error_t *in, uint8_t *out, size_t ca
 static size_t chunk_size(uint16_t mtu)
 {
     return mtu > 3 + PROTOCOL_HEADER_LEN ? (size_t)mtu - 3 - PROTOCOL_HEADER_LEN : 0;
+}
+
+static bool artwork_begin_valid(const protocol_artwork_begin_t *b)
+{
+    if (b->size == 0) {
+        return b->id == 0 && b->format == 0 && b->width == 0 && b->height == 0;
+    }
+    return b->id != 0 && b->format == PROTOCOL_ARTWORK_JPEG && b->width == PROTOCOL_ARTWORK_SIDE
+        && b->height == PROTOCOL_ARTWORK_SIDE && b->size <= PROTOCOL_ARTWORK_MAX_BYTES;
+}
+
+bool protocol_decode_artwork_begin(const uint8_t *data, size_t length, protocol_artwork_begin_t *out)
+{
+    if (data == NULL || out == NULL || length != 14 || data[5] != 0) return false;
+    const protocol_artwork_begin_t b = {
+        .id = get_u32(data), .format = data[4],
+        .width = get_u16(data + 6), .height = get_u16(data + 8), .size = get_u32(data + 10),
+    };
+    if (!artwork_begin_valid(&b)) return false;
+    *out = b;
+    return true;
+}
+
+size_t protocol_encode_artwork_begin(const protocol_artwork_begin_t *in, uint8_t *out, size_t capacity)
+{
+    if (in == NULL || out == NULL || capacity < 14 || !artwork_begin_valid(in)) return 0;
+    put_u32(out, in->id);
+    out[4] = in->format;
+    out[5] = 0;
+    put_u16(out + 6, in->width);
+    put_u16(out + 8, in->height);
+    put_u32(out + 10, in->size);
+    return 14;
+}
+
+bool protocol_decode_artwork_chunk(const uint8_t *data, size_t length, protocol_artwork_chunk_t *out)
+{
+    if (data == NULL || out == NULL || length <= PROTOCOL_ARTWORK_CHUNK_HEADER
+        || length > PROTOCOL_MAX_MESSAGE) return false;
+    const protocol_artwork_chunk_t chunk = {
+        .id = get_u32(data), .offset = get_u32(data + 4),
+        .length = (uint16_t)(length - PROTOCOL_ARTWORK_CHUNK_HEADER),
+        .data = data + PROTOCOL_ARTWORK_CHUNK_HEADER,
+    };
+    /* Written to avoid overflow for offsets near UINT32_MAX. */
+    if (chunk.id == 0 || chunk.offset > PROTOCOL_ARTWORK_MAX_BYTES
+        || chunk.length > PROTOCOL_ARTWORK_MAX_BYTES - chunk.offset) return false;
+    *out = chunk;
+    return true;
+}
+
+size_t protocol_encode_artwork_chunk(const protocol_artwork_chunk_t *in, uint8_t *out, size_t capacity)
+{
+    if (in == NULL || out == NULL || in->data == NULL || in->id == 0 || in->length == 0
+        || in->length > PROTOCOL_MAX_MESSAGE - PROTOCOL_ARTWORK_CHUNK_HEADER
+        || in->offset > PROTOCOL_ARTWORK_MAX_BYTES || in->length > PROTOCOL_ARTWORK_MAX_BYTES - in->offset
+        || capacity < (size_t)PROTOCOL_ARTWORK_CHUNK_HEADER + in->length) return 0;
+    put_u32(out, in->id);
+    put_u32(out + 4, in->offset);
+    memcpy(out + PROTOCOL_ARTWORK_CHUNK_HEADER, in->data, in->length);
+    return PROTOCOL_ARTWORK_CHUNK_HEADER + in->length;
+}
+
+bool protocol_decode_artwork_end(const uint8_t *data, size_t length, protocol_artwork_end_t *out)
+{
+    if (data == NULL || out == NULL || length != 8 || get_u32(data) == 0) return false;
+    *out = (protocol_artwork_end_t){get_u32(data), get_u32(data + 4)};
+    return true;
+}
+
+size_t protocol_encode_artwork_end(const protocol_artwork_end_t *in, uint8_t *out, size_t capacity)
+{
+    if (in == NULL || out == NULL || capacity < 8 || in->id == 0) return 0;
+    put_u32(out, in->id);
+    put_u32(out + 4, in->crc32);
+    return 8;
+}
+
+uint32_t protocol_crc32(uint32_t crc, const uint8_t *data, size_t length)
+{
+    crc = ~crc;
+    for (size_t i = 0; data != NULL && i < length; ++i) {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; ++bit) {
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+        }
+    }
+    return ~crc;
 }
 
 size_t protocol_fragment_count(size_t payload_length, uint16_t mtu)

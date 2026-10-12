@@ -1,6 +1,7 @@
 //! Synchronization sessions: scan, connect, handshake, then mirror the Windows
 //! media session and master volume to Terra and route its buttons and encoder
 //! (M6–M8). `run_forever` reconnects with bounded backoff after any loss (M9).
+//! Terra firmware that offers capability bit3 also receives album artwork (V2).
 
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,15 +10,16 @@ use std::time::{Duration, Instant};
 
 use audio_windows::{AudioError, MasterVolume};
 pub use audio_windows::VolumeLevel;
-pub use protocol::{MediaState, Playback};
+pub use protocol::{ARTWORK_MAX_BYTES, ARTWORK_SIDE, MediaState, Playback};
 use ble_windows::{BleError, Link, LinkEvent};
 use media_windows::{ControlCommand, ControlOutcome, MediaError, MediaReader, MediaSnapshot, Playback as WinPlayback};
 use protocol::{
-    DeviceStatus, ErrorReport, Hello, HelloAck, MediaCommand, MessageType, Reassembler, VERSION,
-    VolumeState, fragment,
+    ARTIST_MAX, ARTWORK_CHUNK_HEADER, ArtworkBegin, ArtworkChunk, ArtworkEnd, CAP_ARTWORK, DeviceStatus, ErrorReport,
+    HEADER_LEN, Hello, HelloAck, MediaCommand, MessageType, Reassembler, TITLE_MAX, VERSION, VolumeState, crc32,
+    fragment,
 };
 
-use crate::sync::{Backoff, MediaInfo, MediaPlayback, media_state, needs_send, no_media_due};
+use crate::sync::{Backoff, MediaInfo, MediaPlayback, media_state, needs_send, no_media_due, truncate_utf8};
 
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
 /// Events often arrive in bursts (metadata, then playback, then timeline).
@@ -30,6 +32,12 @@ const IDLE: Duration = Duration::from_secs(1);
 /// Retry a failed media read; apps can vanish while their session is read.
 const MEDIA_RETRY: Duration = Duration::from_secs(1);
 const NO_MEDIA_GRACE: Duration = Duration::from_millis(crate::sync::NO_MEDIA_GRACE_MS);
+/// Apps often publish the thumbnail shortly after the metadata: look again
+/// every second for this long after a track change, then only on media events.
+const ARTWORK_RETRY: Duration = Duration::from_secs(1);
+const ARTWORK_EAGER: Duration = Duration::from_secs(10);
+/// Largest chunk that still fits one notification at the firmware's MTU 247.
+const ARTWORK_CHUNK_MAX: usize = 232;
 
 #[derive(Debug)]
 pub enum SessionError {
@@ -173,6 +181,8 @@ enum Event {
     Link(LinkEvent),
     MediaChanged,
     VolumeChanged,
+    /// Not queued: returned when artwork work is due and nothing else is waiting.
+    ArtworkDue,
 }
 
 /// Deadlines of coalesced Windows signals that still need a read.
@@ -180,6 +190,8 @@ enum Event {
 struct Pending {
     media: Option<Instant>,
     volume: Option<Instant>,
+    /// Lowest priority: only taken when no queued event is waiting.
+    artwork: Option<Instant>,
 }
 
 impl Pending {
@@ -203,13 +215,22 @@ fn next_event(rx: &mpsc::Receiver<Event>, pending: &mut Pending) -> Result<Event
         if let Some(event) = pending.take_due(now) {
             return Ok(event);
         }
-        let wait = [pending.media, pending.volume].into_iter().flatten().min().map_or(IDLE, |at| at - now);
+        let wait = [pending.media, pending.volume, pending.artwork]
+            .into_iter()
+            .flatten()
+            .min()
+            .map_or(IDLE, |at| at.saturating_duration_since(now));
         // A Windows event always gets a read within its settle time, even when a
         // later recheck (e.g. the NO_MEDIA grace period) is already pending.
         match rx.recv_timeout(wait) {
             Ok(Event::MediaChanged) => schedule(&mut pending.media, Some(Instant::now() + SETTLE)),
             Ok(Event::VolumeChanged) => schedule(&mut pending.volume, Some(Instant::now() + VOLUME_SETTLE)),
-            Err(RecvTimeoutError::Timeout) if pending.media.is_some() || pending.volume.is_some() => {}
+            Err(RecvTimeoutError::Timeout) if pending.artwork.is_some_and(|at| at <= Instant::now()) => {
+                pending.artwork = None;
+                return Ok(Event::ArtworkDue);
+            }
+            Err(RecvTimeoutError::Timeout)
+                if pending.media.is_some() || pending.volume.is_some() || pending.artwork.is_some() => {}
             event => return event,
         }
     }
@@ -304,6 +325,11 @@ impl Sender<'_> {
         }
         Ok(())
     }
+
+    /// Room for message payload in one packet at the current MTU.
+    fn packet_payload(&self) -> usize {
+        self.link.max_packet() - HEADER_LEN
+    }
 }
 
 /// Mirrors the Windows media session; remembers what was last sent.
@@ -356,6 +382,145 @@ impl MediaSync<'_> {
 fn schedule(slot: &mut Option<Instant>, at: Option<Instant>) {
     if let Some(at) = at {
         *slot = Some(slot.map_or(at, |current| current.min(at)));
+    }
+}
+
+/// Identity of the track Terra shows: (source, title, artist, album) as sent.
+type TrackKey = (String, String, String, String);
+
+struct Upload {
+    id: u32,
+    jpeg: Vec<u8>,
+    offset: usize,
+    started: Instant,
+    chunks: u32,
+    /// Time spent inside acknowledged writes, to tell link speed from scheduling.
+    writing: Duration,
+    slowest: Duration,
+}
+
+/// Sends the shown track's artwork once (V2). Chunks go out one per loop pass so
+/// buttons and Windows events are never queued behind a whole image.
+struct ArtworkSync {
+    enabled: bool,
+    track: Option<TrackKey>,
+    since: Instant,
+    /// Artwork sent (or abandoned after a device error) for this track.
+    done: bool,
+    next_try: Option<Instant>,
+    upload: Option<Upload>,
+}
+
+impl ArtworkSync {
+    fn new(enabled: bool) -> Self {
+        Self { enabled, track: None, since: Instant::now(), done: false, next_try: None, upload: None }
+    }
+
+    /// After every media sync, with the MEDIA_STATE Terra now shows. A track
+    /// change makes Terra drop its artwork and any partial transfer.
+    fn on_media(&mut self, shown: Option<&MediaState>) {
+        let key = shown
+            .filter(|state| state.playback != Playback::NoMedia)
+            .map(|s| (s.source.clone(), s.title.clone(), s.artist.clone(), s.album.clone()));
+        if !self.enabled || key == self.track {
+            return;
+        }
+        self.track = key;
+        self.since = Instant::now();
+        self.done = false;
+        self.upload = None;
+        self.next_try = self.track.as_ref().map(|_| Instant::now());
+    }
+
+    /// A Windows media event: a late thumbnail may have arrived.
+    fn on_media_event(&mut self) {
+        if self.track.is_some() && !self.done && self.upload.is_none() {
+            schedule(&mut self.next_try, Some(Instant::now() + ARTWORK_RETRY));
+        }
+    }
+
+    /// After a new handshake Terra has no artwork; send it again.
+    fn reset(&mut self) {
+        let enabled = self.enabled;
+        *self = Self::new(enabled);
+    }
+
+    /// The device rejected a transfer; do not retry it for this track.
+    fn abandon(&mut self) {
+        self.upload = None;
+        self.done = true;
+        self.next_try = None;
+    }
+
+    fn due(&self) -> Option<Instant> {
+        if self.upload.is_some() { Some(Instant::now()) } else { self.next_try }
+    }
+
+    fn poll(&mut self, reader: &MediaReader, sender: &mut Sender, out: &mut Reporter<impl FnMut(Update)>)
+        -> Result<(), SessionError> {
+        if let Some(upload) = &mut self.upload {
+            if upload.offset < upload.jpeg.len() {
+                let room = sender.packet_payload().saturating_sub(ARTWORK_CHUNK_HEADER).clamp(1, ARTWORK_CHUNK_MAX);
+                let end = (upload.offset + room).min(upload.jpeg.len());
+                let chunk = ArtworkChunk { id: upload.id, offset: upload.offset as u32, data: upload.jpeg[upload.offset..end].to_vec() };
+                let write = Instant::now();
+                sender.send(MessageType::ArtworkChunk, &chunk.encode().map_err(|_| SessionError::Protocol("ARTWORK_CHUNK"))?)?;
+                let took = write.elapsed();
+                upload.writing += took;
+                upload.slowest = upload.slowest.max(took);
+                upload.chunks += 1;
+                upload.offset = end;
+            } else {
+                let end = ArtworkEnd { id: upload.id, crc32: crc32(&upload.jpeg) };
+                sender.send(MessageType::ArtworkEnd, &end.encode().map_err(|_| SessionError::Protocol("ARTWORK_END"))?)?;
+                out.log(format!(
+                    "[ARTWORK] sent {} bytes in {:.1} s ({} chunks, writes {:.1} s, slowest {} ms)",
+                    upload.jpeg.len(),
+                    upload.started.elapsed().as_secs_f32(),
+                    upload.chunks,
+                    upload.writing.as_secs_f32(),
+                    upload.slowest.as_millis()
+                ));
+                self.upload = None;
+                self.done = true;
+            }
+            return Ok(());
+        }
+        if self.done || !self.next_try.is_some_and(|at| at <= Instant::now()) {
+            return Ok(());
+        }
+        self.next_try = None;
+        let Some((_, title, artist, _)) = &self.track else { return Ok(()) };
+        let artwork = match reader.artwork(u32::from(protocol::ARTWORK_SIDE), protocol::ARTWORK_MAX_BYTES as usize) {
+            Ok(artwork) => artwork,
+            Err(error) => {
+                out.log(format!("[WARN] artwork read failed: {error}"));
+                None
+            }
+        };
+        // Only the thumbnail of the track Terra shows; the session may have moved on.
+        let matching = artwork.filter(|a| {
+            truncate_utf8(&a.title, TITLE_MAX) == *title && truncate_utf8(&a.artist, ARTIST_MAX) == *artist
+        });
+        let Some(artwork) = matching else {
+            if self.since.elapsed() < ARTWORK_EAGER {
+                self.next_try = Some(Instant::now() + ARTWORK_RETRY);
+            }
+            return Ok(());
+        };
+        let id = crc32(&artwork.jpeg).max(1);
+        let begin = ArtworkBegin::jpeg(id, artwork.jpeg.len() as u32);
+        sender.send(MessageType::ArtworkBegin, &begin.encode().map_err(|_| SessionError::Protocol("ARTWORK_BEGIN"))?)?;
+        self.upload = Some(Upload {
+            id,
+            jpeg: artwork.jpeg,
+            offset: 0,
+            started: Instant::now(),
+            chunks: 0,
+            writing: Duration::ZERO,
+            slowest: Duration::ZERO,
+        });
+        Ok(())
     }
 }
 
@@ -504,7 +669,7 @@ fn run(
                 }
             }
             Ok(Event::Link(LinkEvent::Disconnected)) => return Err(SessionError::Protocol("disconnected during handshake")),
-            Ok(Event::MediaChanged | Event::VolumeChanged) => {}
+            Ok(Event::MediaChanged | Event::VolumeChanged | Event::ArtworkDue) => {}
             Err(_) => return Err(SessionError::NoHello),
         }
     };
@@ -519,10 +684,8 @@ fn run(
     }
     memory.ready = true;
     out.update(Update::Phase(Phase::Ready { address, firmware: hello.firmware, protocol: hello.protocol_version }));
-    if let Ok(status) = link.read_status().map(|bytes| DeviceStatus::decode(&bytes)) {
-        if let Ok(status) = status {
-            out.log(format!("[PROTOCOL] device link state {:?}, rx_errors {}", status.link, status.rx_errors));
-        }
+    if let Ok(Ok(status)) = link.read_status().map(|bytes| DeviceStatus::decode(&bytes)) {
+        out.log(format!("[PROTOCOL] device link state {:?}, rx_errors {}", status.link, status.rx_errors));
     }
 
     let media_tx = tx.clone();
@@ -535,8 +698,14 @@ fn run(
 
     let mut media = MediaSync { reader: &reader, watch, last: None, absent_since: None };
     let mut volume = VolumeSync { audio, last: None };
+    let artwork_enabled = hello.capabilities & CAP_ARTWORK != 0;
+    if artwork_enabled {
+        out.log("[PROTOCOL] device shows album artwork".into());
+    }
+    let mut artwork = ArtworkSync::new(artwork_enabled);
     let mut pending = Pending::default();
     schedule(&mut pending.media, media.sync(&mut sender, out)?);
+    artwork.on_media(media.last.as_ref().map(|(state, _)| state));
     volume.sync(&mut sender, out)?;
 
     let mut polled = Instant::now();
@@ -549,10 +718,14 @@ fn run(
             polled = Instant::now();
             volume.sync(&mut sender, out)?; // follows a changed default playback device
         }
+        pending.artwork = artwork.due();
         match next_event(&rx, &mut pending) {
             Ok(Event::MediaChanged) => {
+                artwork.on_media_event();
                 schedule(&mut pending.media, media.sync(&mut sender, out)?);
+                artwork.on_media(media.last.as_ref().map(|(state, _)| state));
             }
+            Ok(Event::ArtworkDue) => artwork.poll(&reader, &mut sender, out)?,
             Ok(Event::VolumeChanged) => {
                 volume.sync(&mut sender, out)?;
             }
@@ -564,10 +737,15 @@ fn run(
                 let Some(message) = result.message else { continue };
                 match MessageType::from_u8(message.message_type) {
                     Some(MessageType::Error) => match ErrorReport::decode(&message.payload) {
-                        Ok(error) => out.log(format!(
-                            "[DEVICE] rejected type 0x{:02x} seq {} (error {})",
-                            error.related_type, error.related_seq, error.code
-                        )),
+                        Ok(error) => {
+                            out.log(format!(
+                                "[DEVICE] rejected type 0x{:02x} seq {} (error {})",
+                                error.related_type, error.related_seq, error.code
+                            ));
+                            if (0x50..=0x52).contains(&error.related_type) {
+                                artwork.abandon();
+                            }
+                        }
                         Err(_) => out.log("[WARN] malformed ERROR from device".into()),
                     },
                     Some(MessageType::Hello) => {
@@ -582,8 +760,10 @@ fn run(
                         reassembler.reset();
                         media.last = None;
                         volume.last = None;
+                        artwork.reset();
                         out.log("[PROTOCOL] HELLO again; acknowledged".into());
                         schedule(&mut pending.media, media.sync(&mut sender, out)?);
+                        artwork.on_media(media.last.as_ref().map(|(state, _)| state));
                         volume.sync(&mut sender, out)?;
                     }
                     Some(MessageType::MediaCommand) => {
@@ -673,11 +853,61 @@ mod tests {
     }
 
     #[test]
+    fn artwork_chunks_yield_to_queued_events() {
+        let (tx, rx) = mpsc::channel();
+        let packet = packet(MediaCommand::Next);
+        let mut pending = Pending { artwork: Some(Instant::now()), ..Pending::default() };
+        tx.send(Event::Link(LinkEvent::Packet(packet.clone()))).unwrap();
+        // A button press waiting in the queue goes before the next chunk ...
+        assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::Link(LinkEvent::Packet(bytes)) if bytes == packet));
+        // ... then, with nothing queued, the chunk is due at once.
+        let start = Instant::now();
+        assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::ArtworkDue));
+        assert!(start.elapsed() < Duration::from_millis(100) && pending.artwork.is_none());
+        // A future artwork retry does not block an earlier event.
+        pending.artwork = Some(Instant::now() + Duration::from_secs(5));
+        tx.send(Event::Link(LinkEvent::Disconnected)).unwrap();
+        assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::Link(LinkEvent::Disconnected)));
+    }
+
+    #[test]
+    fn artwork_follows_the_shown_track() {
+        let state = |title: &str, playback| MediaState {
+            playback,
+            position_ms: 0,
+            duration_ms: 1000,
+            source: "Chrome".into(),
+            title: title.into(),
+            artist: "Olivia Dean".into(),
+            album: String::new(),
+        };
+        let mut artwork = ArtworkSync::new(true);
+        assert_eq!(artwork.due(), None);
+        artwork.on_media(Some(&state("Lady Lady", Playback::Playing)));
+        assert!(artwork.due().is_some(), "a new track is looked up at once");
+        artwork.next_try = None;
+        artwork.on_media(Some(&state("Lady Lady", Playback::Paused)));
+        assert_eq!(artwork.due(), None, "pausing is not a new track");
+        artwork.on_media_event();
+        assert!(artwork.due().is_some(), "a media event retries a missing thumbnail");
+        artwork.abandon();
+        artwork.on_media_event();
+        assert_eq!(artwork.due(), None, "no retry after the device rejected it");
+        artwork.on_media(Some(&state("Baby Steps", Playback::Playing)));
+        assert!(artwork.due().is_some() && !artwork.done);
+        artwork.on_media(Some(&state("", Playback::NoMedia)));
+        assert_eq!((artwork.track.as_ref(), artwork.due()), (None, None));
+        let mut disabled = ArtworkSync::new(false);
+        disabled.on_media(Some(&state("Lady Lady", Playback::Playing)));
+        assert_eq!(disabled.due(), None, "firmware without capability bit3 gets no artwork");
+    }
+
+    #[test]
     fn media_event_is_read_before_a_pending_grace_recheck() {
         // Regression (12 Oct 2026): a track change during the NO_MEDIA grace
         // period was only read when the 5 s grace recheck came due.
         let (tx, rx) = mpsc::channel();
-        let mut pending = Pending { media: Some(Instant::now() + NO_MEDIA_GRACE), volume: None };
+        let mut pending = Pending { media: Some(Instant::now() + NO_MEDIA_GRACE), ..Pending::default() };
         tx.send(Event::MediaChanged).unwrap();
         let start = Instant::now();
         assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::MediaChanged));

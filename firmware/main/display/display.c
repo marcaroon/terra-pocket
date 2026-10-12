@@ -2,6 +2,7 @@
 #include "board_config.h"
 #include "ui.h"
 #include "esp_check.h"
+#include "esp_heap_caps.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lvgl_port.h"
@@ -9,6 +10,8 @@
 
 static const char *TAG = "DISPLAY";
 static lv_display_t *display;
+static uint16_t *artwork_buffer; /* PSRAM copy that LVGL draws from */
+static uint32_t artwork_version;
 
 esp_err_t display_init(void)
 {
@@ -92,6 +95,11 @@ static void refresh(lv_timer_t *timer)
     (void)timer;
     media_state_t snapshot;
     app_state_snapshot(&snapshot);
+    if (artwork_buffer != NULL && snapshot.artwork_version != artwork_version) {
+        /* Copied here, in the LVGL task, so the buffer never changes mid-draw. */
+        artwork_version = snapshot.artwork_version;
+        snapshot.artwork = app_state_copy_artwork(artwork_buffer);
+    }
     ui_update(&snapshot, now_ms());
 }
 
@@ -99,7 +107,11 @@ esp_err_t display_start_ui(void)
 {
     ESP_RETURN_ON_FALSE(display != NULL, ESP_ERR_INVALID_STATE, TAG, "Display not initialized");
     ESP_RETURN_ON_FALSE(lvgl_port_lock(1000), ESP_ERR_TIMEOUT, TAG, "LVGL lock");
-    ui_create(lv_display_get_screen_active(display));
+    if (app_state_artwork_supported()) {
+        artwork_buffer = heap_caps_malloc(PROTOCOL_ARTWORK_SIDE * PROTOCOL_ARTWORK_SIDE * sizeof(uint16_t),
+                                          MALLOC_CAP_SPIRAM);
+    }
+    ui_create(lv_display_get_screen_active(display), artwork_buffer);
     refresh(NULL);
     /* Flush before enabling the backlight, avoiding an uninitialized frame. */
     lv_refr_now(display);

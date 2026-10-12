@@ -1,0 +1,8 @@
+{
+  "name": "artwork_chunk_zero_id",
+  "kind": "artwork_chunk",
+  "expect": "malformed",
+  "note": "id 0",
+  "bytes": "000000000000000078",
+  "fields": []
+}

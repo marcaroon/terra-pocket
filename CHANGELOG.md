@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased — V2 album artwork (2026-10-12)
+
+- Protokol: ARTWORK_BEGIN/CHUNK/END (0x50–0x52) dan capability bit3, didokumentasikan
+  di `ble-protocol.md` §4.8; `protocol_version` tetap 1, firmware/companion lama
+  tetap kompatibel. 79 vector bersama Python/C/Rust (termasuk CRC-32).
+- Firmware 0.5.0: penerima artwork berurutan dengan CRC ke PSRAM, decode JPEG
+  baseline 160×160 dengan TJpgDec ROM (tanpa komponen baru), tata letak cover
+  160×160 dengan judul/artis satu baris, progres, ikon play/pause dan volume.
+  Tata letak teks tetap dipakai tanpa artwork. Stack task transport 6 KB.
+- Companion: thumbnail sesi GSMTC dipotong persegi, diskalakan dan di-encode JPEG
+  dengan `Windows.Graphics.Imaging` (tanpa crate baru); dikirim per chunk ≤ 232 byte
+  di sela event, hanya ke perangkat dengan bit3, sekali per lagu, dicoba ulang saat
+  thumbnail datang terlambat. `terra-cli artwork [FILE]`.
+- Stabilitas MVP: clippy bersih (satu lint diperbaiki), 18 reset ESP berturut-turut
+  pulih otomatis, soak aplikasi release tanpa kenaikan memori/handle.
+
 ## Unreleased — M10 aplikasi companion (2026-10-12)
 
 - `companion/app`: Tauri 2 (crate 2.11) + React 19 + TypeScript. Jendela

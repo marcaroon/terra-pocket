@@ -1,0 +1,8 @@
+{
+  "name": "artwork_begin_161",
+  "kind": "artwork_begin",
+  "expect": "malformed",
+  "note": "not 160x160",
+  "bytes": "010000000100a100a00064000000",
+  "fields": []
+}

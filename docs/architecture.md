@@ -1,4 +1,4 @@
-# Arsitektur — M10
+# Arsitektur — M10 + V2 album artwork
 
 ## Firmware ESP32-S3
 
@@ -17,6 +17,13 @@ tiga tombol media, encoder (VOLUME_DELTA ±2) dan tombol encoder (MUTE_TOGGLE)
 tanpa menunggu BLE. Perintah lokal diberi identitas sesi READY serta batas umur
 500 ms. Overflow dicatat. Layar volume hanya berubah oleh VOLUME_STATE.
 
+Artwork (V2): transport menerima ARTWORK_BEGIN/CHUNK/END ke buffer JPEG 32 KB di
+PSRAM (`artwork_rx`, CRC-32), lalu men-decode dengan TJpgDec ROM ESP32-S3 menjadi
+RGB565 160×160 (`artwork_decode`). `app_state` menyimpan salinan di PSRAM dengan
+nomor versi; timer UI menyalin ke buffer LVGL di dalam task LVGL hanya saat
+versi berubah, sehingga gambar tidak pernah diubah saat sedang digambar. Lagu
+berganti, disconnect, atau HELLO baru menghapus artwork.
+
 `app_state` adalah sumber state layar dengan mutex. UI dibuat sekali lalu
 diperbarui setiap 200 ms. Progres PLAYING diinterpolasi lokal. Metadata tidak
 diubah secara optimistis setelah tombol ditekan. Disconnect menghapus media
@@ -31,7 +38,7 @@ NTFS driver, operasi tulis, atau file server. Power HDD belum terverifikasi.
 | Crate | Implementasi |
 | --- | --- |
 | protocol | Codec V1/fragment/reassembly; 57 vector bersama C/Rust/Python |
-| media-windows | GSMTC: sesi aktif, metadata/timeline/event dan perintah M7 |
+| media-windows | GSMTC: sesi aktif, metadata/timeline/event, perintah M7, thumbnail → JPEG 160×160 (Windows.Graphics.Imaging, V2) |
 | ble-windows | WinRT scan/connect/discovery/notify/write/status; cleanup saat gagal/drop |
 | companion-core | Handshake, sinkronisasi bermakna, routing command; tidak memiliki UI |
 | audio-windows | Core Audio `IAudioEndpointVolume`: perangkat output default, baca/step/mute, callback perubahan |

@@ -1,0 +1,11 @@
+{
+  "name": "artwork_end_basic",
+  "kind": "artwork_end",
+  "expect": "ok",
+  "note": "",
+  "bytes": "cdab34122639f4cb",
+  "fields": [
+    305441741,
+    3421780262
+  ]
+}

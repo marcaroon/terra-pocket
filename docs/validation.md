@@ -1,5 +1,35 @@
 # Laporan validasi
 
+## Stabilitas MVP dan V2 album artwork — 12 Oktober 2026
+
+**Stabilitas MVP (sebelum V2):** host C, 19 tes Rust, 2 tes aplikasi, `tsc` strict
+lulus; clippy dipasang di toolchain lokal dan bersih setelah satu lint diperbaiki.
+Aplikasi release (GUI) + firmware 0.4.0 di COM11:
+
+- 18 reset ESP berturut-turut lewat EN/RTS: 19 handshake, semuanya pulih otomatis
+  (±14 s, sekali 19 s); UART tanpa warning/error.
+- Soak ±32 menit (23:00–23:32): memori 36,9–38,1 MB tanpa tren naik; handle
+  380–492 dan thread 14–37 naik-turun mengikuti thread pool WinRT saat event
+  (lonjakan 23:27:45 bertepatan dengan ganti lagu, lalu turun); nol disconnect.
+- Belum: start otomatis setelah restart Windows (perlu exe release dan restart).
+
+**V2 compile verified / software tested:** 79 vector Python/C/Rust; tes host
+penerima artwork dan transport produksi; 22 tes Rust (crop persegi, chunk mengalah
+ke event BLE, artwork mengikuti lagu tampil); firmware 0.5.0 dibangun dengan
+`-Werror` (normal 882.461 B, USB probe 948.673 B); preview host tata letak artwork.
+`terra-cli artwork` pada YouTube Music di Chrome: JPEG baseline (SOF0) 160×160,
+subsampling 4:2:0, 5.905 byte, crop tengah benar.
+
+**V2 hardware tested (pengembang, COM11, firmware USB probe 0.5.0):** PSRAM 8 MB
+masuk heap; HELLO membawa bit3 (`device shows album artwork`). Transfer pertama
+setelah flash: 7.640 byte dalam 15,4 s (discovery koneksi itu juga lambat, 8 s);
+UART `Artwork 2a36eafa shown`. Empat transfer berikutnya (koneksi baru dan tiga
+reset ESP): 5.905 byte, 26 chunk, 0,9–1,1 s, tulis terlama 30–120 ms; cover tampil
+±1 s setelah HELLO_ACK; UART tanpa warning. Penyebab transfer lambat pertama belum
+diketahui; dicatat, belum ada workaround. Konfirmasi visual LCD (warna, orientasi)
+dan perilaku saat ganti lagu menunggu pengguna: [v2-test.md](v2-test.md).
+Log: `.tools/v2-companion-*.log`, `.tools/v2-uart-1.log`.
+
 ## M10 aplikasi companion — 12 Oktober 2026
 
 **Compile verified / software tested:** frontend `tsc --noEmit` strict dan

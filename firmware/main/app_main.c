@@ -28,7 +28,7 @@ static void init_nvs(void)
 
 void app_main(void)
 {
-    ESP_LOGI("APP", "Terra %s - media and volume control (M8), LCD 240x240", esp_app_get_description()->version);
+    ESP_LOGI("APP", "Terra %s - media, volume and album artwork (V2), LCD 240x240", esp_app_get_description()->version);
     ESP_LOGI("APP", "PSRAM detected: %u bytes", (unsigned)esp_psram_get_size());
     if (esp_psram_get_size() != BOARD_EXPECTED_PSRAM) {
         ESP_LOGW("APP", "Expected N16R8 PSRAM size; verify board variant");

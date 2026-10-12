@@ -4,16 +4,20 @@ Push-Location $terraRoot
 try {
     New-Item -ItemType Directory -Path .tools -Force | Out-Null
     $compiler = if (Test-Path .tools/w64devkit/bin/gcc.exe) { '.tools/w64devkit/bin/gcc.exe' } else { 'gcc' }
+    $protocol = 'firmware/main/protocol/protocol.c'
+    $artwork = 'firmware/main/artwork/artwork_rx.c'
+    # name, test file, production sources under test
     $checks = @(
-        @('time', 'firmware/tests/test_time_utils.c', 'firmware/main/util/time_utils.c'),
-        @('input', 'firmware/tests/test_input_logic.c', 'firmware/main/input/input_logic.c'),
-        @('disk', 'firmware/tests/test_disk_inspect.c', 'firmware/main/storage/disk_inspect.c'),
-        @('protocol', 'firmware/tests/test_protocol.c', 'firmware/main/protocol/protocol.c'),
-        @('ble-transport', 'firmware/tests/test_ble_transport.c', 'firmware/main/protocol/protocol.c')
+        @('time', 'firmware/tests/test_time_utils.c', @('firmware/main/util/time_utils.c')),
+        @('input', 'firmware/tests/test_input_logic.c', @('firmware/main/input/input_logic.c')),
+        @('disk', 'firmware/tests/test_disk_inspect.c', @('firmware/main/storage/disk_inspect.c')),
+        @('protocol', 'firmware/tests/test_protocol.c', @($protocol)),
+        @('artwork-rx', 'firmware/tests/test_artwork_rx.c', @($artwork, $protocol)),
+        @('ble-transport', 'firmware/tests/test_ble_transport.c', @($protocol, $artwork))
     )
     foreach ($check in $checks) {
         $binary = Join-Path $terraRoot ".tools/test-$($check[0]).exe"
-        & $compiler -std=c11 -Wall -Wextra -Werror -I firmware/tests/stubs -I firmware/main $check[1] $check[2] -o $binary
+        & $compiler -std=c11 -Wall -Wextra -Werror -I firmware/tests/stubs -I firmware/main $check[1] @($check[2]) -o $binary
         if ($LASTEXITCODE -ne 0) { throw "Compile failed: $($check[0])" }
         & $binary docs/protocol-test-vectors
         if ($LASTEXITCODE -ne 0) { throw "Test failed: $($check[0])" }

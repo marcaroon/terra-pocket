@@ -1,0 +1,12 @@
+{
+  "name": "artwork_chunk_last_byte",
+  "kind": "artwork_chunk",
+  "expect": "ok",
+  "note": "",
+  "bytes": "09000000ff7f0000d9",
+  "fields": [
+    9,
+    32767,
+    "d9"
+  ]
+}

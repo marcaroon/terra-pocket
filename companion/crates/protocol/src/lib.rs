@@ -1,4 +1,5 @@
-//! Terra BLE protocol V1: payload codecs, fragmentation and reassembly.
+//! Terra BLE protocol V1: payload codecs, fragmentation and reassembly, plus
+//! the V2 album artwork messages (§4.8).
 //!
 //! The wire format is specified in `docs/ble-protocol.md`. This crate is the
 //! companion-side implementation; the firmware has an independent C codec and
@@ -25,7 +26,13 @@ pub const ALBUM_MAX: usize = 95;
 pub const CAP_MEDIA_STATE: u16 = 0x0001;
 pub const CAP_VOLUME_STATE: u16 = 0x0002;
 pub const CAP_MEDIA_COMMAND: u16 = 0x0004;
-const CAP_ALL: u16 = CAP_MEDIA_STATE | CAP_VOLUME_STATE | CAP_MEDIA_COMMAND;
+pub const CAP_ARTWORK: u16 = 0x0008;
+const CAP_ALL: u16 = CAP_MEDIA_STATE | CAP_VOLUME_STATE | CAP_MEDIA_COMMAND | CAP_ARTWORK;
+
+pub const ARTWORK_JPEG: u8 = 1;
+pub const ARTWORK_SIDE: u16 = 160;
+pub const ARTWORK_MAX_BYTES: u32 = 32_768;
+pub const ARTWORK_CHUNK_HEADER: usize = 8;
 
 /// Message type byte (spec §3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +45,9 @@ pub enum MessageType {
     MediaCommand = 0x20,
     DeviceStatus = 0x30,
     Error = 0x40,
+    ArtworkBegin = 0x50,
+    ArtworkChunk = 0x51,
+    ArtworkEnd = 0x52,
 }
 
 impl MessageType {
@@ -50,6 +60,9 @@ impl MessageType {
             0x20 => Self::MediaCommand,
             0x30 => Self::DeviceStatus,
             0x40 => Self::Error,
+            0x50 => Self::ArtworkBegin,
+            0x51 => Self::ArtworkChunk,
+            0x52 => Self::ArtworkEnd,
             _ => return None,
         })
     }
@@ -348,6 +361,142 @@ impl ErrorReport {
             _ => Err(Malformed),
         }
     }
+}
+
+/// ARTWORK_BEGIN (§4.8). `size == 0` with every other field zero means the
+/// current track has no artwork.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArtworkBegin {
+    pub id: u32,
+    pub format: u8,
+    pub width: u16,
+    pub height: u16,
+    pub size: u32,
+}
+
+impl ArtworkBegin {
+    pub const CLEAR: Self = Self { id: 0, format: 0, width: 0, height: 0, size: 0 };
+
+    /// A 160x160 JPEG of `size` bytes.
+    pub fn jpeg(id: u32, size: u32) -> Self {
+        Self { id, format: ARTWORK_JPEG, width: ARTWORK_SIDE, height: ARTWORK_SIDE, size }
+    }
+
+    fn valid(&self) -> bool {
+        if self.size == 0 {
+            return *self == Self::CLEAR;
+        }
+        self.id != 0
+            && self.format == ARTWORK_JPEG
+            && (self.width, self.height) == (ARTWORK_SIDE, ARTWORK_SIDE)
+            && self.size <= ARTWORK_MAX_BYTES
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        if !self.valid() {
+            return Err(Malformed);
+        }
+        let mut out = self.id.to_le_bytes().to_vec();
+        out.extend_from_slice(&[self.format, 0]);
+        out.extend_from_slice(&self.width.to_le_bytes());
+        out.extend_from_slice(&self.height.to_le_bytes());
+        out.extend_from_slice(&self.size.to_le_bytes());
+        Ok(out)
+    }
+
+    pub fn decode(data: &[u8]) -> Result<Self> {
+        if data.len() != 14 || data[5] != 0 {
+            return Err(Malformed);
+        }
+        let begin = Self {
+            id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+            format: data[4],
+            width: u16::from_le_bytes([data[6], data[7]]),
+            height: u16::from_le_bytes([data[8], data[9]]),
+            size: u32::from_le_bytes(data[10..14].try_into().unwrap()),
+        };
+        if begin.valid() { Ok(begin) } else { Err(Malformed) }
+    }
+}
+
+/// ARTWORK_CHUNK (§4.8): `data` lands at `offset` of the artwork `id`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArtworkChunk {
+    pub id: u32,
+    pub offset: u32,
+    pub data: Vec<u8>,
+}
+
+impl ArtworkChunk {
+    fn valid(&self) -> bool {
+        self.id != 0
+            && !self.data.is_empty()
+            && self.data.len() <= MAX_MESSAGE - ARTWORK_CHUNK_HEADER
+            && u64::from(self.offset) + self.data.len() as u64 <= u64::from(ARTWORK_MAX_BYTES)
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        if !self.valid() {
+            return Err(Malformed);
+        }
+        let mut out = self.id.to_le_bytes().to_vec();
+        out.extend_from_slice(&self.offset.to_le_bytes());
+        out.extend_from_slice(&self.data);
+        Ok(out)
+    }
+
+    pub fn decode(data: &[u8]) -> Result<Self> {
+        if data.len() <= ARTWORK_CHUNK_HEADER || data.len() > MAX_MESSAGE {
+            return Err(Malformed);
+        }
+        let chunk = Self {
+            id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+            offset: u32::from_le_bytes(data[4..8].try_into().unwrap()),
+            data: data[ARTWORK_CHUNK_HEADER..].to_vec(),
+        };
+        if chunk.valid() { Ok(chunk) } else { Err(Malformed) }
+    }
+}
+
+/// ARTWORK_END (§4.8): the receiver checks the CRC of all received bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArtworkEnd {
+    pub id: u32,
+    pub crc32: u32,
+}
+
+impl ArtworkEnd {
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        if self.id == 0 {
+            return Err(Malformed);
+        }
+        let mut out = self.id.to_le_bytes().to_vec();
+        out.extend_from_slice(&self.crc32.to_le_bytes());
+        Ok(out)
+    }
+
+    pub fn decode(data: &[u8]) -> Result<Self> {
+        if data.len() != 8 {
+            return Err(Malformed);
+        }
+        let end = Self {
+            id: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+            crc32: u32::from_le_bytes(data[4..8].try_into().unwrap()),
+        };
+        if end.id == 0 { Err(Malformed) } else { Ok(end) }
+    }
+}
+
+/// CRC-32/ISO-HDLC (zlib), as carried by ARTWORK_END.
+pub fn crc32(data: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for &byte in data {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xEDB8_8320 & 0u32.wrapping_sub(crc & 1));
+        }
+    }
+    !crc
 }
 
 /// Splits one message into packets for an ATT MTU (packet length = MTU - 3).

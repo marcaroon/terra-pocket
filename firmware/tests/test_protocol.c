@@ -36,7 +36,7 @@ static size_t unhex(const char *hex, uint8_t *out, size_t capacity)
     return n;
 }
 
-static long num(const char *text) { return strtol(text, NULL, 0); }
+static long long num(const char *text) { return strtoll(text, NULL, 0); }
 
 /* Portable replacement for strtok_r: splits *cursor at delim in place. */
 static char *next_token(char **cursor, char delim)
@@ -107,6 +107,34 @@ static void test_payload(const char *name, const char *kind, bool ok, char **f)
         if (!ok) return;
         CHECK(e.code == num(f[0]) && e.related_type == num(f[1]) && e.related_seq == num(f[2]), name);
         m = protocol_encode_error(&e, again, sizeof(again));
+    } else if (strcmp(kind, "artwork_begin") == 0) {
+        protocol_artwork_begin_t b;
+        CHECK(protocol_decode_artwork_begin(data, n, &b) == ok, name);
+        if (!ok) return;
+        CHECK(b.id == (uint32_t)num(f[0]) && b.format == num(f[1]) && b.width == num(f[2])
+              && b.height == num(f[3]) && b.size == (uint32_t)num(f[4]), name);
+        m = protocol_encode_artwork_begin(&b, again, sizeof(again));
+    } else if (strcmp(kind, "artwork_chunk") == 0) {
+        protocol_artwork_chunk_t c;
+        CHECK(protocol_decode_artwork_chunk(data, n, &c) == ok, name);
+        if (!ok) return;
+        uint8_t expected[PROTOCOL_MAX_MESSAGE];
+        const size_t len = unhex(f[2], expected, sizeof(expected));
+        CHECK(c.id == (uint32_t)num(f[0]) && c.offset == (uint32_t)num(f[1]) && c.length == len
+              && memcmp(c.data, expected, len) == 0, name);
+        m = protocol_encode_artwork_chunk(&c, again, sizeof(again));
+    } else if (strcmp(kind, "artwork_end") == 0) {
+        protocol_artwork_end_t e;
+        CHECK(protocol_decode_artwork_end(data, n, &e) == ok, name);
+        if (!ok) return;
+        CHECK(e.id == (uint32_t)strtoul(f[0], NULL, 0) && e.crc32 == (uint32_t)strtoul(f[1], NULL, 0), name);
+        m = protocol_encode_artwork_end(&e, again, sizeof(again));
+    } else if (strcmp(kind, "crc32") == 0) {
+        CHECK(protocol_crc32(0, data, n) == (uint32_t)strtoul(f[0], NULL, 0), name);
+        /* Continuing over two halves gives the same result. */
+        CHECK(protocol_crc32(protocol_crc32(0, data, n / 2), data + n / 2, n - n / 2)
+              == (uint32_t)strtoul(f[0], NULL, 0), name);
+        return;
     } else {
         CHECK(false && "unknown kind", name);
     }

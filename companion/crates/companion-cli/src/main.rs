@@ -6,6 +6,8 @@ Usage: terra-cli <command>
 Commands:
   media            Print the current Windows media session (M5)
   media --watch    Print a line whenever the track, playback or source changes
+  artwork [FILE]   Save the current track's artwork as Terra receives it (V2);
+                   default FILE: terra-artwork.jpg
   volume           Print the Windows master volume of the default playback device (M8)
   volume --watch   Print a line whenever that volume or mute changes
   devices          Scan for Terra devices over Bluetooth LE (M6)
@@ -34,6 +36,8 @@ fn main() -> ExitCode {
         }
         ["media"] => media::print_current(),
         ["media", "--watch"] => media::watch(),
+        ["artwork"] => media::artwork("terra-artwork.jpg"),
+        ["artwork", path] => media::artwork(path),
         ["volume"] => volume::print_current(),
         ["volume", "--watch"] => volume::watch(),
         ["devices"] => ble::devices(),
@@ -134,6 +138,36 @@ mod media {
                 seconds(new.position_ms),
                 seconds(new.duration_ms)
             )),
+        }
+    }
+
+    pub fn artwork(path: &str) -> ExitCode {
+        use companion_core::session::{ARTWORK_MAX_BYTES, ARTWORK_SIDE};
+        let reader = match reader() {
+            Ok(reader) => reader,
+            Err(code) => return code,
+        };
+        match reader.artwork(u32::from(ARTWORK_SIDE), ARTWORK_MAX_BYTES as usize) {
+            Ok(Some(artwork)) => match std::fs::write(path, &artwork.jpeg) {
+                Ok(()) => {
+                    println!("Track    : {} - {}", artwork.artist, artwork.title);
+                    println!("Artwork  : {ARTWORK_SIDE}x{ARTWORK_SIDE} JPEG, {} bytes", artwork.jpeg.len());
+                    println!("Saved to : {path}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("Cannot write {path}: {error}");
+                    ExitCode::FAILURE
+                }
+            },
+            Ok(None) => {
+                println!("No artwork: no media session, or the app publishes no thumbnail");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("Cannot read the artwork: {error}");
+                ExitCode::FAILURE
+            }
         }
     }
 
@@ -375,6 +409,10 @@ mod media {
     }
 
     pub fn watch() -> ExitCode {
+        print_current()
+    }
+
+    pub fn artwork(_: &str) -> ExitCode {
         print_current()
     }
 }

@@ -10,23 +10,67 @@
 #define COLOR_WARNING    0xFFB86B
 
 static struct {
-    lv_obj_t *source, *link, *title, *artist, *bar, *timeline, *playback, *volume;
+    lv_obj_t *source, *link, *title, *artist, *bar, *timeline, *playback, *volume, *artwork;
 } w;
 
-static lv_obj_t *label(lv_obj_t *parent, int x, int y, int width, int height,
-                       const lv_font_t *font, uint32_t color)
+/* The artwork widget draws straight from the caller's buffer (ui_create). */
+static lv_image_dsc_t artwork_image;
+static uint32_t shown_artwork_version;
+static int layout = -1; /* 0 text, 1 artwork */
+
+static lv_obj_t *label(lv_obj_t *parent, uint32_t color)
 {
     lv_obj_t *obj = lv_label_create(parent);
-    lv_obj_set_pos(obj, x, y);
-    lv_obj_set_size(obj, width, height);
-    lv_obj_set_style_text_font(obj, font, 0);
     lv_obj_set_style_text_color(obj, lv_color_hex(color), 0);
     lv_label_set_long_mode(obj, LV_LABEL_LONG_MODE_DOTS);
     lv_label_set_text_static(obj, "");
     return obj;
 }
 
-void ui_create(lv_obj_t *screen)
+static void place(lv_obj_t *obj, int x, int y, int width, int height, const lv_font_t *font)
+{
+    lv_obj_set_pos(obj, x, y);
+    lv_obj_set_size(obj, width, height);
+    if (font != NULL) {
+        lv_obj_set_style_text_font(obj, font, 0);
+    }
+}
+
+/* Text layout: the M4 screen. Artwork layout (V2): 160x160 cover on top, one
+ * line each for title and artist, then progress, time, playback and volume. */
+static void apply_layout(bool with_artwork)
+{
+    if (layout == (int)with_artwork) {
+        return;
+    }
+    layout = with_artwork;
+    lv_obj_t *screen = lv_obj_get_parent(w.title);
+    const int width = lv_obj_get_width(screen);
+    const int height = lv_obj_get_height(screen);
+    if (with_artwork) {
+        const int side = PROTOCOL_ARTWORK_SIDE;
+        place(w.artwork, (width - side) / 2, 6, side, side, NULL);
+        place(w.link, width - 36, 6, 32, 18, &lv_font_montserrat_14);
+        place(w.title, 12, 170, width - 24, 22, &lv_font_montserrat_18);
+        place(w.artist, 12, 192, width - 24, 18, &lv_font_montserrat_14);
+        place(w.bar, 12, 214, width - 24, 3, NULL);
+        place(w.timeline, 12, height - 20, 112, 18, &lv_font_montserrat_14);
+        place(w.playback, 126, height - 20, 24, 18, &lv_font_montserrat_14);
+        place(w.volume, width - 92, height - 20, 80, 18, &lv_font_montserrat_14);
+    } else {
+        const int content = width - 36;
+        place(w.source, 18, 16, content - 54, 20, &lv_font_montserrat_14);
+        place(w.link, width - 54, 16, 36, 20, &lv_font_montserrat_14);
+        place(w.title, 18, 48, content, 66, &lv_font_montserrat_28);
+        place(w.artist, 18, height - 116, content, 26, &lv_font_montserrat_18);
+        place(w.bar, 18, height - 74, content, 4, NULL);
+        place(w.timeline, 18, height - 61, content, 20, &lv_font_montserrat_14);
+        place(w.playback, 18, height - 32, 98, 20, &lv_font_montserrat_14);
+        place(w.volume, width - 118, height - 32, 100, 20, &lv_font_montserrat_14);
+    }
+}
+
+void ui_create(lv_obj_t *screen, uint16_t *artwork_buffer)
 {
     lv_obj_clean(screen);
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
@@ -34,28 +78,39 @@ void ui_create(lv_obj_t *screen)
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(screen, 0, 0);
 
-    const int width = lv_obj_get_width(screen);
-    const int height = lv_obj_get_height(screen);
-    const int content = width - 36;
-    w.source = label(screen, 18, 16, content - 54, 20, &lv_font_montserrat_14, COLOR_SECONDARY);
-    w.link = label(screen, width - 54, 16, 36, 20, &lv_font_montserrat_14, COLOR_SECONDARY);
+    w.artwork = lv_image_create(screen);
+    w.source = label(screen, COLOR_SECONDARY);
+    w.link = label(screen, COLOR_SECONDARY);
     lv_obj_set_style_text_align(w.link, LV_TEXT_ALIGN_RIGHT, 0);
-    w.title = label(screen, 18, 48, content, 66, &lv_font_montserrat_28, COLOR_FOREGROUND);
-    lv_label_set_long_mode(w.title, LV_LABEL_LONG_MODE_DOTS);
-    w.artist = label(screen, 18, height - 116, content, 26, &lv_font_montserrat_18, COLOR_SECONDARY);
+    w.title = label(screen, COLOR_FOREGROUND);
+    w.artist = label(screen, COLOR_SECONDARY);
 
     w.bar = lv_bar_create(screen);
-    lv_obj_set_pos(w.bar, 18, height - 74);
-    lv_obj_set_size(w.bar, content, 4);
     lv_bar_set_range(w.bar, 0, 1000);
     lv_obj_set_style_bg_color(w.bar, lv_color_hex(0x333C48), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(w.bar, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(w.bar, lv_color_hex(COLOR_ACCENT), LV_PART_INDICATOR);
 
-    w.timeline = label(screen, 18, height - 61, content, 20, &lv_font_montserrat_14, COLOR_SECONDARY);
-    w.playback = label(screen, 18, height - 32, 98, 20, &lv_font_montserrat_14, COLOR_FOREGROUND);
-    w.volume = label(screen, width - 118, height - 32, 100, 20, &lv_font_montserrat_14, COLOR_FOREGROUND);
+    w.timeline = label(screen, COLOR_SECONDARY);
+    w.playback = label(screen, COLOR_FOREGROUND);
+    w.volume = label(screen, COLOR_FOREGROUND);
     lv_obj_set_style_text_align(w.volume, LV_TEXT_ALIGN_RIGHT, 0);
+
+    artwork_image = (lv_image_dsc_t){
+        .header = {
+            .magic = LV_IMAGE_HEADER_MAGIC,
+            .cf = LV_COLOR_FORMAT_RGB565,
+            .w = PROTOCOL_ARTWORK_SIDE,
+            .h = PROTOCOL_ARTWORK_SIDE,
+            .stride = PROTOCOL_ARTWORK_SIDE * 2,
+        },
+        .data_size = PROTOCOL_ARTWORK_SIDE * PROTOCOL_ARTWORK_SIDE * 2,
+        .data = (const uint8_t *)artwork_buffer,
+    };
+    shown_artwork_version = 0;
+    layout = -1;
+    apply_layout(false);
+    lv_obj_add_flag(w.artwork, LV_OBJ_FLAG_HIDDEN);
 }
 
 /* Sets text only when it changed, avoiding needless redraws on periodic updates. */
@@ -79,10 +134,27 @@ static void set_color(lv_obj_t *obj, uint32_t color)
     lv_obj_set_style_text_color(obj, lv_color_hex(color), 0);
 }
 
+static void update_artwork(const media_state_t *state, bool show)
+{
+    if (state->artwork_version != shown_artwork_version) {
+        shown_artwork_version = state->artwork_version;
+        if (state->artwork && artwork_image.data != NULL) {
+            /* Same buffer, new pixels. The image cache is off (LV_CACHE_DEF_SIZE=0),
+             * so a redraw reads the buffer again. */
+            lv_image_set_src(w.artwork, &artwork_image);
+            lv_obj_invalidate(w.artwork);
+        }
+    }
+    set_visible(w.artwork, show);
+}
+
 void ui_update(const media_state_t *state, uint32_t now_ms)
 {
     const bool ready = state->link == LINK_READY;
     const bool media = ready && state->playback != PLAYBACK_NO_MEDIA;
+    const bool with_artwork = media && state->artwork && artwork_image.data != NULL;
+    apply_layout(with_artwork);
+    update_artwork(state, with_artwork);
 
     const char *link_text = state->link == LINK_READY ? "BLE"
         : state->link == LINK_CONNECTED ? "..."
@@ -127,6 +199,8 @@ void ui_update(const media_state_t *state, uint32_t now_ms)
         set_text(w.artist, "");
     }
 
+    /* The cover identifies the source; the label would overlap it. */
+    set_visible(w.source, !with_artwork);
     set_visible(w.bar, media);
     set_visible(w.timeline, media);
     set_visible(w.playback, media);
@@ -150,7 +224,9 @@ void ui_update(const media_state_t *state, uint32_t now_ms)
         }
         snprintf(timeline, sizeof(timeline), "%s / %s", elapsed, duration);
         set_text(w.timeline, timeline);
-        set_text(w.playback, state->playback == PLAYBACK_PLAYING ? "Playing" : "Paused");
+        const bool playing = state->playback == PLAYBACK_PLAYING;
+        set_text(w.playback, with_artwork ? (playing ? LV_SYMBOL_PLAY : LV_SYMBOL_PAUSE)
+                                          : (playing ? "Playing" : "Paused"));
     }
     if (ready) {
         char volume[16];
