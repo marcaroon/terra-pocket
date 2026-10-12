@@ -1,5 +1,6 @@
 #include "ble/ble_transport.h"
 #include <stdio.h>
+#include <stdatomic.h>
 #include <string.h>
 #include "app_state.h"
 #include "ble/ble_service.h"
@@ -16,11 +17,21 @@ static const char *TAG = "PROTOCOL";
 
 #define EVENT_QUEUE_DEPTH  16
 #define NOTIFY_RETRIES     5
-/* M3/M4 render media and volume; MEDIA_COMMAND is added with M7. */
-#define CAPABILITIES       (PROTOCOL_CAP_MEDIA_STATE | PROTOCOL_CAP_VOLUME_STATE)
+#define CAPABILITIES       (PROTOCOL_CAP_MEDIA_STATE | PROTOCOL_CAP_VOLUME_STATE | PROTOCOL_CAP_MEDIA_COMMAND)
+#define COMMAND_MAX_AGE_MS 500
+
+typedef struct {
+    bool local_command;
+    union {
+        ble_event_t ble;
+        struct { uint32_t epoch, created_ms; uint8_t payload[3]; } command;
+    };
+} transport_event_t;
 
 static QueueHandle_t events;
-static volatile uint32_t sink_drops;
+static atomic_uint sink_drops;
+static atomic_uint ready_epoch;
+static uint32_t epoch_counter; /* owned by transport task; zero means not ready */
 
 static struct {
     bool connected;
@@ -41,8 +52,14 @@ static uint32_t now_ms(void)
 
 static bool sink(const ble_event_t *event, bool must_deliver)
 {
-    if (xQueueSend(events, event, must_deliver ? pdMS_TO_TICKS(50) : 0) != pdTRUE) {
-        ++sink_drops;
+    /* Invalidate local commands immediately, before lifecycle events are dequeued. */
+    if (event->type == BLE_EVENT_DISCONNECTED || event->type == BLE_EVENT_TX_UNSUBSCRIBED
+        || event->type == BLE_EVENT_TX_SUBSCRIBED || event->type == BLE_EVENT_CONNECTED) {
+        atomic_store(&ready_epoch, 0);
+    }
+    const transport_event_t queued = {.ble = *event};
+    if (xQueueSend(events, &queued, must_deliver ? pdMS_TO_TICKS(50) : 0) != pdTRUE) {
+        atomic_fetch_add(&sink_drops, 1);
         return false;
     }
     return true;
@@ -79,6 +96,12 @@ static void set_link(link_state_t state)
         return;
     }
     link.link = state;
+    if (state == LINK_READY) {
+        if (++epoch_counter == 0) ++epoch_counter;
+        atomic_store(&ready_epoch, epoch_counter);
+    } else {
+        atomic_store(&ready_epoch, 0);
+    }
     app_state_set_link(state);
     publish_status(true);
 }
@@ -152,6 +175,10 @@ static void handle_message(uint8_t type, uint8_t seq, const uint8_t *payload, si
 {
     switch (type) {
     case PROTOCOL_MSG_HELLO_ACK: {
+        if (!link.connected || !link.subscribed || link.link != LINK_CONNECTED) {
+            reject(PROTOCOL_ERR_NOT_READY, type, seq);
+            return;
+        }
         protocol_hello_ack_t ack;
         if (!protocol_decode_hello_ack(payload, length, &ack)) {
             reject(PROTOCOL_ERR_MALFORMED, type, seq);
@@ -275,6 +302,7 @@ static void handle_event(const ble_event_t *event)
     case BLE_EVENT_TX_UNSUBSCRIBED:
         if (link.connected && event->conn_handle == link.conn_handle) {
             link.subscribed = false;
+            protocol_reassembler_reset(&link.rx);
             set_link(LINK_CONNECTED);
         }
         break;
@@ -284,16 +312,29 @@ static void handle_event(const ble_event_t *event)
     }
 }
 
+static void process_event(const transport_event_t *event)
+{
+    if (!event->local_command) {
+        handle_event(&event->ble);
+    } else if (link.link == LINK_READY
+               && event->command.epoch == atomic_load(&ready_epoch)
+               && (uint32_t)(now_ms() - event->command.created_ms) <= COMMAND_MAX_AGE_MS) {
+        send_message(PROTOCOL_MSG_MEDIA_COMMAND, event->command.payload, 3);
+    } else {
+        ESP_LOGW(TAG, "Stale button command discarded");
+    }
+}
+
 static void transport_task(void *arg)
 {
     (void)arg;
-    static ble_event_t event; /* 250 bytes; kept off the task stack */
+    static transport_event_t event; /* kept off the task stack */
     uint32_t reported_drops = 0;
     for (;;) {
         if (xQueueReceive(events, &event, portMAX_DELAY) == pdTRUE) {
-            handle_event(&event);
+            process_event(&event);
         }
-        const uint32_t drops = sink_drops;
+        const uint32_t drops = atomic_load(&sink_drops);
         if (drops != reported_drops) {
             ESP_LOGW(TAG, "Event queue full: %lu events dropped", (unsigned long)(drops - reported_drops));
             for (uint32_t i = reported_drops; i != drops; ++i) {
@@ -316,10 +357,24 @@ esp_err_t ble_transport_start(void)
     link.firmware[1] = (uint8_t)minor;
     link.firmware[2] = (uint8_t)patch;
     link.link = LINK_BOOT;
-    events = xQueueCreate(EVENT_QUEUE_DEPTH, sizeof(ble_event_t));
+    events = xQueueCreate(EVENT_QUEUE_DEPTH, sizeof(transport_event_t));
     ESP_RETURN_ON_FALSE(events != NULL, ESP_ERR_NO_MEM, TAG, "Queue");
     ESP_RETURN_ON_FALSE(xTaskCreate(transport_task, "ble_transport", 4096, NULL, 5, NULL) == pdPASS,
                         ESP_ERR_NO_MEM, TAG, "Task");
     set_link(LINK_ADVERTISING);
     return ble_service_init(sink);
+}
+
+esp_err_t ble_transport_send_command(const protocol_command_t *command)
+{
+    transport_event_t event = {.local_command = true};
+    /* SEEK_DELTA is reserved in V1; the codec validates every other value. */
+    if (command == NULL || command->command == PROTOCOL_CMD_SEEK_DELTA
+        || protocol_encode_command(command, event.command.payload, 3) != 3) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    event.command.epoch = atomic_load(&ready_epoch);
+    event.command.created_ms = now_ms();
+    if (events == NULL || event.command.epoch == 0) return ESP_ERR_INVALID_STATE;
+    return xQueueSend(events, &event, 0) == pdTRUE ? ESP_OK : ESP_ERR_TIMEOUT;
 }

@@ -15,11 +15,15 @@ Windows. Spesifikasi lengkap: [PROJECT_SPEC.md](PROJECT_SPEC.md).
 | M4 | Protokol V1: fragmentasi, reassembly, HELLO, MEDIA/VOLUME_STATE | 57 vector bersama C/Rust/Python; uji BLE hardware lulus; konfirmasi visual layar menunggu |
 | M5 | `terra-cli media` / `media --watch` membaca sesi media Windows (GSMTC) | Diuji di laptop: metadata, status, timeline, pause/track/seek |
 | M6 | `terra-cli devices` / `connect`: companion Rust mengirim media Windows ke Terra lewat BLE | Diuji: scan, connect, handshake, play/pause/ganti lagu/seek diterima perangkat |
-| M7+ | Kontrol media dari tombol, volume, reconnect otomatis, GUI | Belum dimulai |
+| M7 | Previous / Play-Pause / Next fisik → sesi Windows aktif | Diuji di hardware tanpa diagnostik (Chrome): Play/Pause 8/8, Previous 4/4, Next 4/4, satu command per tekanan. Kasus tepi di [uji M7](docs/m7-test.md) belum diulang |
+| M8 | Encoder volume/mute ↔ master volume Windows (Core Audio) | Diuji di hardware: 12/12 klik encoder dan 4/4 mute sampai Windows dan kembali ke perangkat; perubahan dari Windows sampai ke perangkat. Menunggu konfirmasi visual LCD dan ganti perangkat output; lihat [uji M8](docs/m8-test.md) |
+| M9–M10 | Reconnect otomatis, GUI | Belum dimulai |
 
 Wire format: [ble-protocol.md](docs/ble-protocol.md). Pemakaian sekarang: putar musik di
-Windows, lalu jalankan `companion\target\debug\terra-cli.exe connect`. Tombol fisik masih
-hanya dicatat di log (M7), volume belum disinkronkan (M8), dan setelah koneksi putus
+Windows, lalu jalankan `companion\target\debug\terra-cli.exe connect` (atau `monitor`).
+Firmware **0.4.0** mengirim tombol Previous, Play/Pause, Next serta encoder volume (±2)
+dan mute ketika link READY; companion menjalankannya di Windows dan mengirim balik
+volume aktual (`terra-cli volume` membaca volume saja). Setelah koneksi putus
 `connect` perlu dijalankan ulang (reconnect otomatis M9).
 
 Layar dari renderer LVGL yang sama, dijalankan di komputer (bukan foto hardware):
@@ -74,6 +78,8 @@ pengujian, dan flash. Jangan flash sebelum memeriksa [wiring](docs/wiring.md).
 - [State machine](docs/state-machine.md)
 - [Build dan pengujian hardware](docs/development.md)
 - [Laporan validasi](docs/validation.md)
+- [Uji tombol M7](docs/m7-test.md)
+- [Uji volume M8](docs/m8-test.md)
 - [Changelog](CHANGELOG.md)
 - [Proposal NAS dan Vercel](docs/nas-proposal.md)
 - [Uji input M2 dan diagnostik disk N0](docs/m2-n0-test.md)

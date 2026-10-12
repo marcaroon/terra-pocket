@@ -1,4 +1,10 @@
 menu "Terra"
+    config TERRA_INPUT_DIAGNOSTICS
+        bool "Log raw button transitions for wiring/debounce diagnosis"
+        default n
+        help
+            Temporary diagnostic: logs GPIO press/release edges and durations.
+            Disable after capture; UART logging can affect sampling of noisy contacts.
     config TERRA_USB_PROBE
         bool "Enable read-only USB sector diagnostics (N0)"
         default n

@@ -140,6 +140,20 @@ i16 value
 `value` harus 0 untuk PLAY_PAUSE, NEXT, PREVIOUS, MUTE_TOGGLE. VOLUME_DELTA
 memakai −100…100 kecuali 0 (encoder V1: +2 / −2). SEEK_DELTA tidak didukung di V1.
 
+Implementasi M7 (firmware 0.3.0): mengirim PLAY_PAUSE/NEXT/PREVIOUS saja setelah
+READY dan mengiklankan capability bit2. Encoder volume/mute masih log lokal (M8).
+
+Implementasi M8 (firmware 0.4.0): encoder mengirim VOLUME_DELTA +2/−2 per klik,
+tombol encoder MUTE_TOGGLE, dengan aturan antrean yang sama. Companion membalas
+dengan VOLUME_STATE berisi nilai yang dibaca ulang dari Windows (bukan nilai
+yang diminta) dan juga mengirim VOLUME_STATE saat volume diubah dari Windows.
+Wire format tidak berubah; tidak ada vector baru.
+Perintah tidak mengubah layar secara optimistis: hasil playback berasal dari
+MEDIA_STATE berikutnya. Tidak ada retry aplikasi/ACK command di V1; kegagalan
+notify dapat kehilangan satu tekanan dan dicatat di firmware. Antrean tombol
+dibatasi ke sesi READY saat tekanan diteruskan, kedaluwarsa setelah 500 ms,
+dan dibuang saat disconnect atau re-handshake.
+
 ### 4.6 DEVICE_STATUS
 
 ```text
@@ -183,6 +197,8 @@ disconnect dari state mana pun ─► ADVERTISING (reassembler dan media direset
    mengirim status 1 dan berhenti menyinkronkan media.
 4. Firmware masuk READY hanya jika HELLO_ACK `protocol_version = 1` dan
    `status = 0`; selain itu PROTOCOL_MISMATCH dan layar menampilkan ketidakcocokan.
+   HELLO_ACK hanya diterima pada CONNECTED setelah subscribe TX. ACK sebelum
+   subscribe atau ACK duplikat saat READY mendapat ERROR `NOT_READY`.
 5. MEDIA_STATE / VOLUME_STATE sebelum READY dijawab ERROR `NOT_READY`.
 6. Firmware menjawab pesan yang di-reassembly tetapi tidak sah dengan ERROR:
    versi beda `UNSUPPORTED_VERSION` (hanya pada paket START), payload salah

@@ -28,7 +28,7 @@ static void init_nvs(void)
 
 void app_main(void)
 {
-    ESP_LOGI("APP", "Terra %s - BLE link (M3/M4), LCD 240x240", esp_app_get_description()->version);
+    ESP_LOGI("APP", "Terra %s - media and volume control (M8), LCD 240x240", esp_app_get_description()->version);
     ESP_LOGI("APP", "PSRAM detected: %u bytes", (unsigned)esp_psram_get_size());
     if (esp_psram_get_size() != BOARD_EXPECTED_PSRAM) {
         ESP_LOGW("APP", "Expected N16R8 PSRAM size; verify board variant");
@@ -48,17 +48,25 @@ void app_main(void)
 #else
     ESP_LOGI("APP", "USB HDD probe disabled (normal build)");
 #endif
-    ESP_LOGI("APP", "Input events are logged only; media commands arrive with M7");
+    ESP_LOGI("APP", "Media buttons and encoder volume/mute active when READY");
     input_event_t event;
     for (;;) {
         if (!input_receive(&event, portMAX_DELAY)) continue;
+        protocol_command_t command = {0};
         switch (event) {
-        case INPUT_PREVIOUS: ESP_LOGI("INPUT", "PREVIOUS"); break;
-        case INPUT_PLAY_PAUSE: ESP_LOGI("INPUT", "PLAY_PAUSE"); break;
-        case INPUT_NEXT: ESP_LOGI("INPUT", "NEXT"); break;
-        case INPUT_MUTE: ESP_LOGI("INPUT", "MUTE"); break;
-        case INPUT_VOLUME_UP: ESP_LOGI("INPUT", "VOLUME +%d", BOARD_VOLUME_STEP); break;
-        case INPUT_VOLUME_DOWN: ESP_LOGI("INPUT", "VOLUME -%d", BOARD_VOLUME_STEP); break;
+        case INPUT_PREVIOUS: command.command = PROTOCOL_CMD_PREVIOUS; break;
+        case INPUT_PLAY_PAUSE: command.command = PROTOCOL_CMD_PLAY_PAUSE; break;
+        case INPUT_NEXT: command.command = PROTOCOL_CMD_NEXT; break;
+        case INPUT_MUTE: command.command = PROTOCOL_CMD_MUTE_TOGGLE; break;
+        case INPUT_VOLUME_UP:
+            command = (protocol_command_t){PROTOCOL_CMD_VOLUME_DELTA, BOARD_VOLUME_STEP};
+            break;
+        case INPUT_VOLUME_DOWN:
+            command = (protocol_command_t){PROTOCOL_CMD_VOLUME_DELTA, -BOARD_VOLUME_STEP};
+            break;
         }
+        /* The screen changes only when the companion reports the resulting state. */
+        const esp_err_t err = ble_transport_send_command(&command);
+        ESP_LOGI("INPUT", "MEDIA_COMMAND %u %d: %s", command.command, command.value, esp_err_to_name(err));
     }
 }

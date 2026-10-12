@@ -5,6 +5,10 @@ version = 4
 [[package]]
 name = "audio-windows"
 version = "0.1.0"
+dependencies = [
+ "windows",
+ "windows-core",
+]
 
 [[package]]
 name = "ble-windows"
@@ -17,6 +21,7 @@ dependencies = [
 name = "companion-cli"
 version = "0.1.0"
 dependencies = [
+ "audio-windows",
  "ble-windows",
  "companion-core",
  "media-windows",
@@ -26,6 +31,7 @@ dependencies = [
 name = "companion-core"
 version = "0.1.0"
 dependencies = [
+ "audio-windows",
  "ble-windows",
  "media-windows",
  "protocol",

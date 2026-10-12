@@ -166,13 +166,26 @@ pub enum LinkEvent {
 
 /// An open GATT link to Terra with TX notifications enabled.
 pub struct Link {
-    device: BluetoothLEDevice,
-    session: GattSession,
+    connection: Connection,
     rx: GattCharacteristic,
     tx: GattCharacteristic,
     status: GattCharacteristic,
-    tx_token: i64,
-    connection_token: i64,
+    tx_token: Option<i64>,
+    connection_token: Option<i64>,
+}
+
+// Also closes partial connections when discovery or handler registration fails.
+struct Connection {
+    device: BluetoothLEDevice,
+    session: GattSession,
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        let _ = self.session.SetMaintainConnection(false);
+        let _ = self.session.Close();
+        let _ = self.device.Close();
+    }
 }
 
 fn characteristic(
@@ -200,6 +213,9 @@ impl Link {
             .and_then(|id| GattSession::FromDeviceIdAsync(&id))
             .and_then(|op| op.join())
             .step("Open GATT session")?;
+        let connection = Connection { device, session };
+        let device = &connection.device;
+        let session = &connection.session;
         session.SetMaintainConnection(true).step("Maintain connection")?;
         // Windows has no explicit connect: the first GATT request opens the link.
         // Observed on this laptop: waiting for an active session first never
@@ -235,10 +251,11 @@ impl Link {
         let rx = characteristic(&service, RX_UUID, "RX characteristic")?;
         let tx = characteristic(&service, TX_UUID, "TX characteristic")?;
         let status = characteristic(&service, STATUS_UUID, "STATUS characteristic")?;
+        let mut link = Self { connection, rx, tx, status, tx_token: None, connection_token: None };
 
         let on_event = Arc::new(on_event);
         let packets = on_event.clone();
-        let tx_token = tx.ValueChanged(&TypedEventHandler::<GattCharacteristic, GattValueChangedEventArgs>::new(
+        link.tx_token = Some(link.tx.ValueChanged(&TypedEventHandler::<GattCharacteristic, GattValueChangedEventArgs>::new(
             move |_, args| {
                 if let Some(args) = args.as_ref() {
                     if let Ok(bytes) = to_bytes(&args.CharacteristicValue()?) {
@@ -247,9 +264,9 @@ impl Link {
                 }
                 Ok(())
             },
-        ))?;
+        ))?);
         let lost = on_event.clone();
-        let connection_token = device.ConnectionStatusChanged(&TypedEventHandler::<BluetoothLEDevice, IInspectable>::new(
+        link.connection_token = Some(link.connection.device.ConnectionStatusChanged(&TypedEventHandler::<BluetoothLEDevice, IInspectable>::new(
             move |device, _| {
                 if let Some(device) = device.as_ref() {
                     if device.ConnectionStatus()? == BluetoothConnectionStatus::Disconnected {
@@ -258,8 +275,7 @@ impl Link {
                 }
                 Ok(())
             },
-        ))?;
-        let link = Self { device, session, rx, tx, status, tx_token, connection_token };
+        ))?);
         let status = link
             .tx
             .WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify)
@@ -272,7 +288,7 @@ impl Link {
     /// Maximum packet length for the current ATT MTU (MTU - 3), capped at the
     /// firmware limit. The MTU can grow after connecting, so read it per message.
     pub fn max_packet(&self) -> usize {
-        let mtu = self.session.MaxPduSize().unwrap_or(23) as usize;
+        let mtu = self.connection.session.MaxPduSize().unwrap_or(23) as usize;
         mtu.saturating_sub(3).clamp(20, MAX_PACKET)
     }
 
@@ -290,14 +306,14 @@ impl Link {
     }
 
     pub fn is_connected(&self) -> bool {
-        self.device.ConnectionStatus().map(|s| s == BluetoothConnectionStatus::Connected).unwrap_or(false)
+        self.connection.device.ConnectionStatus().map(|s| s == BluetoothConnectionStatus::Connected).unwrap_or(false)
     }
 }
 
 impl Drop for Link {
     fn drop(&mut self) {
-        let _ = self.tx.RemoveValueChanged(self.tx_token);
-        let _ = self.device.RemoveConnectionStatusChanged(self.connection_token);
+        if let Some(token) = self.tx_token { let _ = self.tx.RemoveValueChanged(token); }
+        if let Some(token) = self.connection_token { let _ = self.connection.device.RemoveConnectionStatusChanged(token); }
         if self.is_connected() {
             let _ = self
                 .tx
@@ -306,9 +322,6 @@ impl Drop for Link {
                 )
                 .and_then(|op| op.join());
         }
-        let _ = self.session.SetMaintainConnection(false);
-        let _ = self.session.Close();
-        let _ = self.device.Close();
     }
 }
 

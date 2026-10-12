@@ -1,7 +1,6 @@
 //! Windows media sessions through GSMTC (`Windows.Media.Control`), PROJECT_SPEC §18.
 //!
-//! M5 scope: read the current session (source, metadata, playback, timeline) and
-//! observe changes. Media commands (TryTogglePlayPauseAsync etc.) arrive with M7.
+//! Reads and observes the current session (M5), and controls its playback (M7).
 #![cfg(windows)]
 
 use std::fmt;
@@ -38,6 +37,12 @@ impl From<windows::core::Error> for MediaError {
 }
 
 pub type Result<T> = std::result::Result<T, MediaError>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlCommand { PlayPause, Next, Previous }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlOutcome { Accepted, Rejected, Unsupported, NoSession }
 
 type Notify = Arc<dyn Fn() + Send + Sync>;
 
@@ -110,10 +115,10 @@ pub fn estimate_position(
     now: i64,
     playing: bool,
 ) -> (u64, u64) {
-    let duration = (end - start).max(0);
-    let mut current = (position - start).max(0);
+    let duration = end.saturating_sub(start).max(0);
+    let mut current = position.saturating_sub(start).max(0);
     if playing && last_updated > 0 && now > last_updated {
-        current = current.saturating_add(now - last_updated);
+        current = current.saturating_add(now.saturating_sub(last_updated));
     }
     if duration > 0 {
         current = current.min(duration);
@@ -200,6 +205,33 @@ impl MediaReader {
         }
     }
 
+    /// Resolve the current session for each press, including after app switches.
+    /// A false WinRT result is a rejected request, not a successful state change.
+    pub fn control(&self, command: ControlCommand) -> Result<ControlOutcome> {
+        let session = match self.manager.GetCurrentSession() {
+            Ok(session) => session,
+            Err(error) if error.code().is_ok() => return Ok(ControlOutcome::NoSession),
+            Err(error) => return Err(error.into()),
+        };
+        let controls = session.GetPlaybackInfo()?.Controls()?;
+        let enabled = match command {
+            ControlCommand::PlayPause => controls.IsPlayPauseToggleEnabled()?,
+            ControlCommand::Next => controls.IsNextEnabled()?,
+            ControlCommand::Previous => controls.IsPreviousEnabled()?,
+        };
+        // Try* reports success/failure; do not skip a request solely on a capability snapshot.
+        let operation = match command {
+            ControlCommand::PlayPause => session.TryTogglePlayPauseAsync()?,
+            ControlCommand::Next => session.TrySkipNextAsync()?,
+            ControlCommand::Previous => session.TrySkipPreviousAsync()?,
+        };
+        Ok(match (operation.join()?, enabled) {
+            (true, _) => ControlOutcome::Accepted,
+            (false, true) => ControlOutcome::Rejected,
+            (false, false) => ControlOutcome::Unsupported,
+        })
+    }
+
     /// Calls `on_change` whenever the current session changes or the current
     /// session reports new media, playback or timeline data. It runs on WinRT
     /// threads and should only signal; call `MediaWatch::sync` after each
@@ -220,7 +252,10 @@ impl MediaReader {
                 tx();
                 Ok(())
             },
-        ))?;
+        )).map_err(|error| {
+            let _ = self.manager.RemoveCurrentSessionChanged(current);
+            MediaError::from(error)
+        })?;
         let watch = MediaWatch {
             manager: self.manager.clone(),
             manager_tokens: (current, sessions),
@@ -250,7 +285,11 @@ impl MediaWatch {
     /// Moves the per-session subscriptions to the current session if it changed
     /// (spec §18: unsubscribe old, select new, subscribe new).
     pub fn sync(&self) -> Result<()> {
-        let current = self.manager.GetCurrentSession().ok();
+        let current = match self.manager.GetCurrentSession() {
+            Ok(session) => Some(session),
+            Err(error) if error.code().is_ok() => None,
+            Err(error) => return Err(error.into()),
+        };
         let mut guard = self.session.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let same = match (&*guard, &current) {
             (Some(old), Some(new)) => {
@@ -273,6 +312,7 @@ impl MediaWatch {
     }
 
     fn subscribe(&self, session: Session) -> Result<Subscribed> {
+        let app_id = session.SourceAppUserModelId()?.to_string();
         let tx = self.changes.clone();
         let media = session.MediaPropertiesChanged(
             &TypedEventHandler::<Session, MediaPropertiesChangedEventArgs>::new(move |_, _| {
@@ -286,15 +326,21 @@ impl MediaWatch {
                 tx();
                 Ok(())
             }),
-        )?;
+        ).map_err(|error| {
+            let _ = session.RemoveMediaPropertiesChanged(media);
+            MediaError::from(error)
+        })?;
         let tx = self.changes.clone();
         let timeline = session.TimelinePropertiesChanged(
             &TypedEventHandler::<Session, TimelinePropertiesChangedEventArgs>::new(move |_, _| {
                 tx();
                 Ok(())
             }),
-        )?;
-        let app_id = session.SourceAppUserModelId()?.to_string();
+        ).map_err(|error| {
+            let _ = session.RemoveMediaPropertiesChanged(media);
+            let _ = session.RemovePlaybackInfoChanged(playback);
+            MediaError::from(error)
+        })?;
         Ok(Subscribed { session, app_id, tokens: [media, playback, timeline] })
     }
 }
@@ -331,6 +377,9 @@ mod tests {
         assert_eq!(estimate_position(15_000 * MS, 5_000 * MS, 20_000 * MS, 1, 100_000 * MS, true), (15_000, 15_000));
         // No timeline published.
         assert_eq!(estimate_position(0, 0, 0, 0, 5, true), (0, 0));
+        // Malformed/extreme app timelines cannot overflow subtraction.
+        assert_eq!(estimate_position(i64::MAX, i64::MIN, i64::MAX, 1, i64::MAX, true),
+            ((i64::MAX / MS) as u64, (i64::MAX / MS) as u64));
     }
 
     #[test]

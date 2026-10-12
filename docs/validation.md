@@ -1,5 +1,187 @@
 # Laporan validasi
 
+## Pemeriksaan ulang M7 dan implementasi M8 — 12 Oktober 2026
+
+**Pemeriksaan ulang M7 (software):** sebelum perubahan M8, `scripts/test-host.ps1`
+lulus (time, input, disk, 57 vector, transport produksi), `cargo test --workspace
+--locked` lulus, dan firmware 0.3.0 profil normal berhasil dibangun. Review kode
+routing tombol, antrean sesi/umur 500 ms, dan dispatch GSMTC tidak menemukan cacat
+baru. Status hardware M7 tetap **penerimaan parsial** seperti di bawah.
+
+**M8 — compile verified dan software tested:**
+
+- Firmware 0.4.0: kedua profil lulus dengan `-Werror`; image normal 879.441 byte,
+  USB probe 945.809 byte. Build USB lokal memakai `CONFIG_TERRA_INPUT_DIAGNOSTICS`
+  mati agar uji berikutnya juga menjadi uji tombol M7 tanpa diagnostik.
+- Host C: transport produksi meneruskan VOLUME_DELTA ±2 dan MUTE_TOGGLE; perintah
+  tidak sah (delta 0/101, mute bernilai, SEEK_DELTA, ID 7) ditolak.
+- Rust: 15 tes lulus, termasuk pembulatan skalar, clamp, routing encoder sekali,
+  dan urutan BLE di tengah burst event media+volume. Build tanpa warning.
+- **Core Audio nyata di laptop pengembangan** (bukan perangkat Terra):
+  `terra-cli volume` membaca 14%, tidak mute. Tes `--ignored` menaikkan ke 16%,
+  kembali 14%, mute lalu unmute, dan menerima 4 notifikasi perubahan; nilai akhir
+  sama dengan awal.
+
+**Hardware tested (sebagian, Windows → perangkat):** firmware USB probe 0.4.0
+di-flash ke COM11 (hash ketiga image diverifikasi). Companion M8: connect,
+`HELLO protocol=1 firmware=0.4.0`, link Ready, `rx_errors 0`, media Chrome, dan
+`[VOLUME] 14`. Tombol volume keyboard Windows (naik, turun, mute, unmute, jeda
+1,5 detik) menghasilkan `[VOLUME] 16`, `14`, `14 muted`, `14` di companion dan
+`STATE: Volume 16`, `14`, `14 (muted)`, `14` di UART. Volume akhir dikembalikan
+ke 14%. Perubahan dalam satu jendela 50 ms yang kembali ke nilai semula tidak
+dikirim (sesuai rancangan: hanya keadaan akhir). Log: `.tools/m8-companion.log`,
+`.tools/m8-uart.log`, `.tools/m8-flash.log`.
+
+**Uji pengguna encoder dan tombol (firmware 0.4.0, diagnostik GPIO mati, Chrome/
+YouTube Music):**
+
+- Encoder: 12 klik (5 naik, 5 turun, 1 naik, 1 turun) → 12 `MEDIA_COMMAND 4 ±2`
+  firmware → 12 `VolumeDelta` companion → 12 `STATE: Volume`; urutan 14→24→14→16→14.
+  Tidak ada command hilang, dobel, `ESP_ERR_TIMEOUT`, atau ERROR. Dari log UART,
+  tekanan sampai VOLUME_STATE diterima 85–165 ms.
+- Tombol encoder: 4 tekanan → 4 `MEDIA_COMMAND 5 0` → muted/unmuted bergantian.
+- Windows → perangkat: perubahan di luar encoder (16/14 lalu 12/10/8/10) sampai
+  ke firmware.
+- **M7 tanpa diagnostik:** Play/Pause 8/8 Accepted dengan playback bergantian;
+  Previous 4/4 (pertama kembali ke 0,1 s, tiga berikutnya pindah lagu); Next 4/4
+  pindah lagu. Setiap tekanan menghasilkan tepat satu `MEDIA_COMMAND`. Kriteria
+  inti M7 (tombol fisik mengendalikan sesi media Windows aktif) **terpenuhi**;
+  baris tepi m7-test (tanpa sesi, aplikasi tidak mendukung, ganti aplikasi,
+  tekan saat BLE putus) belum diuji ulang.
+- **Temuan:** setiap ganti lagu di Chrome, GSMTC sesaat melaporkan tidak ada sesi
+  aktif; companion mengirim NO_MEDIA dan LCD menampilkan "Nothing Playing"
+  0,2–3,5 detik sebelum lagu baru. Perilaku Windows/Chrome ini dicatat dulu
+  (aturan 15); penanganannya direncanakan bersama perpindahan aplikasi media di M9.
+
+Status M8: kriteria encoder → volume Windows dan Windows → perangkat terbukti di
+log. Konfirmasi visual `VOL NN`/`MUTED` di LCD dan pergantian perangkat output
+default masih menunggu laporan pengguna. Log: `.tools/m8-companion.log`,
+`.tools/m8-uart.log`.
+
+## Tindak lanjut uji pengguna M7 — 12 Oktober 2026
+
+Pengguna menguji YouTube di Chrome: judul sudah tampil dan mengikuti video di
+LCD (konfirmasi visual M6). M7 **belum lulus**: dilaporkan hanya klik pertama
+masing-masing tombol bekerja. Companion mencatat empat command awal Accepted,
+tanpa error, dan tetap menerima perubahan media.
+
+Pada uji ulang Play/Pause empat tekanan dengan jeda sekitar dua detik, rekaman
+UART hanya mendapat satu `INPUT: MEDIA_COMMAND 1: ESP_OK`, lalu companion
+Accepted dan status Paused. Kehilangan terjadi sebelum pengiriman BLE;
+penyebab debounce/kontak belum dipastikan. Diagnostik GPIO tekan/lepas sedang
+disiapkan. Jangan menyatakan M7 diterima sampai uji ulang berulang berhasil.
+
+**Uji ulang dengan diagnostik aktif:** build profil USB lulus, image 946.225 byte
+(bin dipadding menjadi 946.336 byte), flash COM11 diverifikasi. Tidak ada perubahan
+algoritme debounce (tetap 40 ms) atau routing command; hanya pencatatan edge GPIO
+melalui `CONFIG_TERRA_INPUT_DIAGNOSTICS=y` pada konfigurasi lokal.
+
+- Windows berpindah dari Spotify ke Apple Music dan companion mengikuti sesi aktif.
+- Empat tekanan Play/Pause di Apple Music: empat LOW/HIGH GPIO5, empat
+  `MEDIA_COMMAND 1: ESP_OK`, empat hasil Accepted, playback bergantian Paused/Playing.
+  Pantulan saat pelepasan terakhir (HIGH 1 ms, LOW 1 ms) tidak menambah command.
+- Empat klik biasa berikutnya (durasi LOW 140, 158, 99, 129 ms) juga menghasilkan
+  empat command dan perubahan playback; pengguna mengonfirmasi “sudah bisa”.
+  Meski instruksi uji menyebut Chrome, log companion pada rangkaian ini masih
+  menunjukkan **Apple Music**; jangan mencatatnya sebagai uji Chrome terverifikasi.
+- Sumber kegagalan awal **belum terbukti**. Flash/reset dan logging diagnostik
+  terjadi sebelum uji ulang; hasil ini belum membuktikan perbaikan permanen.
+  Next/Previous berulang dan pengulangan tanpa logging masih perlu diperiksa.
+
+**Rangkaian Next/Previous berikutnya:** log Apple Music mencatat Next 3/3
+Accepted dengan tiga judul baru. Previous menghasilkan tiga command dari GPIO4,
+tetapi companion mencatat Unsupported karena `IsPreviousEnabled=false` dan
+belum memanggil `TrySkipPreviousAsync`. Pengguna kemudian mengonfirmasi bahwa
+Previous memang masih bermasalah. Ada pulsa LOW 1 ms di antara tekanan normal
+125–165 ms; debounce tidak meneruskannya sebagai command.
+
+Companion diubah untuk tetap mencoba satu `Try*Async` atas tekanan yang valid;
+hasil API menentukan Accepted, sedangkan false dibedakan Rejected/Unsupported
+berdasarkan capability snapshot. Tidak ada fallback keyboard global atau seek
+diam-diam. Build dan 12 tes Rust lulus setelah perubahan.
+
+**Uji ulang YouTube Music di Chrome:** pengguna menekan Previous empat kali dan
+melaporkan tekanan kedua serta keempat tampak tidak bekerja. UART mencatat empat
+tekanan GPIO4 (LOW 143, 113, 107, 98 ms), masing-masing menghasilkan tepat satu
+`MEDIA_COMMAND 3: ESP_OK`. Companion mencatat empat `Previous: Accepted`; dua
+pembaruan posisi menunjukkan lagu yang sama kembali ke sekitar 0,1 detik.
+Tidak ada kehilangan command yang terlihat pada rangkaian ini.
+
+Pada pembandingan di antrean yang sama, pengguna mengonfirmasi **tombol Previous
+di halaman web juga tidak selalu bereaksi**. Ini menunjukkan gejala juga terjadi
+tanpa tombol Terra; belum membuktikan penyebab spesifik di YouTube Music, antrean,
+atau Chrome. `Accepted` tidak menjamin perpindahan lagu. Jangan menambahkan retry
+otomatis atau mengubah debounce berdasarkan hasil ini karena satu tekanan bisa
+memicu dua aksi. Log: `.tools/m7-previous-api.log`.
+
+Status M7 tetap **penerimaan parsial**: Play/Pause Apple Music 8/8 dan Next 3/3
+terverifikasi; Previous Chrome 4/4 sampai API Windows, efek mengikuti keterbatasan
+yang juga terlihat pada tombol web. Previous Apple Music setelah perubahan API
+serta pengulangan input tanpa logging diagnostik belum diverifikasi. Penyebab
+kehilangan input awal tetap terbuka dan berbeda dari gejala Previous terbaru.
+
+Log lokal: `.tools/m7-input-diagnostic-uart.log` dan
+`.tools/m7-input-diagnostic-companion.log`. Diagnostik default mati di source,
+tetapi aktif pada firmware USB yang sedang dipasang untuk pengujian ini.
+
+## Audit M0–M6 dan pengembangan M7 — 12 Oktober 2026
+
+Checkout diperiksa dari commit dasar `779872e` (M6), kini berlokasi di
+`D:\Personal\Project\terra-pocket`. Wiring/calibration M1–M2 yang sudah diukur
+dipertahankan. Alur sesuai blueprint: GSMTC → Rust companion → BLE V1 →
+app_state → LCD 240×240; M7 menambahkan arah tombol → GSMTC.
+
+### Temuan dan perbaikan
+
+- **Prioritas tinggi:** penggabungan event GSMTC menguras seluruh antrean dan
+  membuang notifikasi BLE selain disconnect. Diperbaiki dengan deadline 150 ms
+  yang hanya menggabungkan sinyal media; test memasukkan command dan ERROR di
+  tengah burst media serta memastikan urutan tetap utuh.
+- **Prioritas sedang:** HELLO ulang sebelumnya dijawab memakai ACK lama tanpa
+  memvalidasi versi/payload. Sekarang divalidasi ulang. Deadline handshake juga
+  menghentikan perangkat yang terus mengirim paket selain HELLO.
+- **Prioritas sedang:** jalur gagal saat registrasi parsial dapat meninggalkan
+  event handler/koneksi yang dipertahankan. Handler media dan koneksi BLE kini
+  dibersihkan pada jalur gagal. Audit source dan compile; kegagalan WinRT tersebut
+  belum diinjeksi pada perangkat nyata.
+- **Prioritas sedang:** firmware belum mereset reassembler saat unsubscribe dan
+  menerima HELLO_ACK sebelum subscribe. Keduanya dikoreksi serta diuji host.
+- Scan default kini menyelesaikan interval sebelum memilih RSSI terkuat; sebelumnya
+  berhenti pada perangkat pertama meski help menyebut terkuat. Timeline memakai
+  pengurangan jenuh agar nilai ekstrem aplikasi tidak menyebabkan overflow.
+- Dokumen arsitektur/development yang masih menggambarkan scaffold M1 diperbarui.
+
+### Bukti software dan radio
+
+- Baseline dan hasil akhir `scripts/test-host.ps1` lulus: time, input, disk,
+  57 vector protokol, ditambah harness transport produksi untuk M7. Harness
+  menguji handshake, tiga tombol, offline, kedaluwarsa, pergantian sesi,
+  re-subscribe, duplicate ACK, dan antrean penuh; radio/scheduler di-stub.
+- `cargo test --workspace --locked`: 12 tes lulus (termasuk dua tes regresi M7),
+  `cargo build --workspace --locked` lulus dengan toolchain GNU lokal.
+- 57 vector hasil generator Python identik dengan vector di repo.
+- Kedua profil firmware 0.3.0 berhasil dibangun dengan `-Werror`; ukuran image
+  normal 879.585 byte dan USB probe 945.925 byte (bin dapat dipadding).
+- COM11 teridentifikasi sebagai CH343 `1A86:55D3`; firmware USB probe 0.3.0
+  di-flash dan hash diverifikasi. BLE MAC `28:84:85:48:15:BA`, MTU 247.
+- Harness BLE nyata lulus pada firmware lama 0.2.0 **dan** 0.3.0: discovery,
+  HELLO/ACK, READY, media/volume, pesan malformed/versi asing/orphan,
+  reassembly media 361 byte, lalu disconnect. M7 mengiklankan caps `0x0007`.
+  Log lokal: `.tools/m6-regression-ble.log`, `.tools/m7-regression-ble.log`.
+- Companion M7 nyata berhasil connect/HELLO/READY pada board dan membaca
+  keadaan Windows tanpa media; log `.tools/m7-companion.log` dan UART
+  `.tools/m7-uart.log`. Hasil tombol fisik dicatat setelah konfirmasi pengguna.
+
+### Batas penerimaan
+
+M0–M6 berada pada jalur blueprint, tetapi **belum boleh disebut seluruh acceptance
+selesai**: konfirmasi visual metadata nyata, ketahanan input, aplikasi nyata,
+serta sleep/wake/koneksi lama masih mengikuti daftar uji. M7 membutuhkan
+[penerimaan tombol fisik](m7-test.md). Build/test tidak menggantikan uji tersebut.
+M8 volume, M9 reconnect, M10 GUI, dan NAS NTFS/cloud belum diimplementasikan.
+Tidak ada operasi tulis/format HDD dalam pekerjaan ini. CI diperbarui; belum
+ada klaim run GitHub untuk perubahan yang belum di-push.
+
 ## M6 — 12 Oktober 2026
 
 **Software tested:** `cargo test --workspace` lulus (aturan sinkronisasi, pemotongan

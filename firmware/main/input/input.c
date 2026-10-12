@@ -1,5 +1,6 @@
 #include "input.h"
 #include "input_logic.h"
+#include "sdkconfig.h"
 #include "board_config.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
@@ -27,6 +28,10 @@ static void input_task(void *arg)
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     for (unsigned i = 0; i < 4; ++i) {
         button_filter_init(&filters[i], gpio_get_level(buttons[i]) == 0, now);
+#if CONFIG_TERRA_INPUT_DIAGNOSTICS
+        ESP_LOGI("BUTTON_EDGE", "GPIO%d initial %s", buttons[i],
+                 filters[i].stable ? "LOW/pressed" : "HIGH/released");
+#endif
     }
     encoder_filter_init(&encoder, read_encoder(), BOARD_ENCODER_HALF_STEP);
     TickType_t wake = xTaskGetTickCount();
@@ -34,7 +39,15 @@ static void input_task(void *arg)
     for (;;) {
         now = (uint32_t)(esp_timer_get_time() / 1000);
         for (unsigned i = 0; i < 4; ++i) {
-            if (button_filter_sample(&filters[i], gpio_get_level(buttons[i]) == 0,
+            const bool pressed = gpio_get_level(buttons[i]) == 0;
+#if CONFIG_TERRA_INPUT_DIAGNOSTICS
+            if (pressed != filters[i].candidate) {
+                ESP_LOGI("BUTTON_EDGE", "GPIO%d %s after %lu ms", buttons[i],
+                         pressed ? "LOW/press" : "HIGH/release",
+                         (unsigned long)(now - filters[i].changed_ms));
+            }
+#endif
+            if (button_filter_sample(&filters[i], pressed,
                                      now, BOARD_INPUT_DEBOUNCE_MS)) {
                 const input_event_t event = (input_event_t)i;
                 if (xQueueSend(events, &event, 0) != pdTRUE) ++dropped;

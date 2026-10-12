@@ -1,6 +1,48 @@
 # Changelog
 
-## Unreleased — M6 Windows BLE client
+## Unreleased — M8 volume (2026-10-12)
+
+- Firmware 0.4.0: encoder mengirim VOLUME_DELTA +2/−2 per klik dan tombol encoder
+  MUTE_TOGGLE saat READY, dengan aturan sesi/umur/antrean yang sama seperti tombol
+  media. Layar volume hanya berubah dari VOLUME_STATE. Wire format tidak berubah.
+- Crate `audio-windows`: Core Audio `IAudioEndpointVolume` untuk perangkat output
+  default (render/console): baca persen dan mute, step dengan clamp 0–100, toggle
+  mute, callback perubahan, dan rebind saat perangkat default berganti.
+  `unsafe` COM dibatasi ke satu modul; workspace lain tetap `forbid(unsafe_code)`.
+- Companion: perintah encoder dijalankan sekali, volume dibaca ulang lalu dikirim
+  sebagai VOLUME_STATE; perubahan dari Windows digabung 50 ms dan dikirim hanya bila
+  berubah; perangkat default diperiksa tiap detik. `terra-cli volume [--watch]`.
+- Tes: transport C untuk volume/mute dan perintah tidak sah, routing encoder Rust,
+  pembulatan/clamp volume, uji Core Audio nyata opsional (`--ignored`). CI menjalankan
+  smoke test `terra-cli volume`. Panduan [uji M8](docs/m8-test.md).
+
+## M7 dan pemeriksaan M6 (2026-10-12)
+
+- Tindak lanjut input: opsi diagnostik GPIO tekan/lepas (default mati). Laporan
+  klik berulang hilang belum memiliki akar penyebab yang terbukti; setelah flash
+  diagnostik, Play/Pause 8/8 diterima pada Apple Music. Debounce belum diubah.
+- Previous: capability false tidak lagi menghentikan request sebelum API dicoba;
+  status keberhasilan berasal dari hasil `Try*Async`. Uji Apple Music sebelumnya
+  mencatat Next 3/3 Accepted, Previous Unsupported. Uji ulang Previous Chrome
+  menghasilkan 4/4 command Accepted; pengguna mengonfirmasi tombol web YouTube
+  Music juga tidak selalu bereaksi. Belum ada dasar untuk retry atau perubahan
+  debounce; penerimaan M7 masih parsial (lihat validation.md).
+
+- Firmware 0.3.0: tiga tombol media menjadi MEDIA_COMMAND pada link READY,
+  capability bit2 aktif; perintah offline, kedaluwarsa, atau dari sesi lama dibuang.
+- Companion memakai GSMTC untuk Play/Pause, Next, Previous; hasil ditampilkan
+  sebagai Accepted/Rejected/Unsupported/NoSession. `monitor` adalah alias aktif
+  `connect`. Encoder volume/mute tetap M8.
+- Perbaikan M6: penggabungan event media tidak lagi membuang notifikasi BLE;
+  HELLO ulang divalidasi; deadline handshake berlaku meski paket terus masuk;
+  scan default selesai sebelum memilih RSSI terkuat.
+- Cleanup langganan media dan koneksi BLE pada inisialisasi parsial yang gagal;
+  aritmetika timeline tahan overflow. Unsubscribe firmware mereset reassembler,
+  HELLO_ACK hanya diterima setelah subscribe dan sebelum READY.
+- Tes transport produksi dengan radio/scheduler stub, regresi antrean Rust,
+  routing command, dan pembaruan panduan/status fase.
+
+## M6 Windows BLE client
 
 - Crate `ble-windows`: scan aktif (nama/UUID service), koneksi via `GattSession`
   dengan MaintainConnection, discovery service/karakteristik, handler TX dipasang

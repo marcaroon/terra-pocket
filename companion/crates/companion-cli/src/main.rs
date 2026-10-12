@@ -6,14 +6,16 @@ Usage: terra-cli <command>
 Commands:
   media            Print the current Windows media session (M5)
   media --watch    Print a line whenever the track, playback or source changes
+  volume           Print the Windows master volume of the default playback device (M8)
+  volume --watch   Print a line whenever that volume or mute changes
   devices          Scan for Terra devices over Bluetooth LE (M6)
-  connect [ADDR]   Connect to Terra and mirror Windows media to its display (M6)
+  connect [ADDR]   Mirror Windows media and volume; handle Terra's buttons and encoder (M8)
                    ADDR is optional, e.g. 28:84:85:48:15:BA; default: strongest found
+  monitor [ADDR]   Alias of connect; includes live media, volume and command-result logs
   --help, -h       Show this help
   --version, -V    Show the version
 
-monitor arrives with device commands (M7). The link is not re-established
-automatically after a disconnect yet (M9).";
+The link is not re-established automatically after a disconnect yet (M9).";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -29,19 +31,17 @@ fn main() -> ExitCode {
         }
         ["media"] => media::print_current(),
         ["media", "--watch"] => media::watch(),
+        ["volume"] => volume::print_current(),
+        ["volume", "--watch"] => volume::watch(),
         ["devices"] => ble::devices(),
-        ["connect"] => ble::connect(None),
-        ["connect", address] => match ble::parse_address(address) {
+        ["connect" | "monitor"] => ble::connect(None),
+        ["connect" | "monitor", address] => match ble::parse_address(address) {
             Some(address) => ble::connect(Some(address)),
             None => {
                 eprintln!("Invalid address {address}; expected AA:BB:CC:DD:EE:FF.");
                 ExitCode::from(2)
             }
         },
-        ["monitor", ..] => {
-            eprintln!("Command not available yet: arrives with device commands (M7).");
-            ExitCode::from(2)
-        }
         _ => {
             eprintln!("Unknown command. Use --help.");
             ExitCode::from(2)
@@ -266,6 +266,89 @@ mod ble {
 
     pub fn connect(_: Option<u64>) -> ExitCode {
         devices()
+    }
+}
+
+#[cfg(windows)]
+mod volume {
+    use audio_windows::{MasterVolume, VolumeLevel};
+    use std::process::ExitCode;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    fn describe(level: Option<VolumeLevel>) -> String {
+        match level {
+            Some(VolumeLevel { percent, muted: true }) => format!("[VOLUME] {percent} muted"),
+            Some(VolumeLevel { percent, muted: false }) => format!("[VOLUME] {percent}"),
+            None => "[VOLUME] no playback device".into(),
+        }
+    }
+
+    pub fn print_current() -> ExitCode {
+        match MasterVolume::new(|| {}).and_then(|volume| volume.level()) {
+            Ok(Some(level)) => {
+                println!("Volume : {}%", level.percent);
+                println!("Muted  : {}", if level.muted { "yes" } else { "no" });
+                ExitCode::SUCCESS
+            }
+            Ok(None) => {
+                println!("No playback device");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("Cannot read the Windows master volume: {error}");
+                ExitCode::FAILURE
+            }
+        }
+    }
+
+    pub fn watch() -> ExitCode {
+        let (tx, rx) = mpsc::channel();
+        let mut volume = match MasterVolume::new(move || {
+            let _ = tx.send(());
+        }) {
+            Ok(volume) => volume,
+            Err(error) => {
+                eprintln!("Cannot open the Windows master volume: {error}");
+                return ExitCode::FAILURE;
+            }
+        };
+        println!("Watching the Windows master volume; Ctrl+C to stop.");
+        let mut last = None;
+        let mut first = true;
+        loop {
+            // Wake on a change, or every second to follow a new default device.
+            if !first && rx.recv_timeout(Duration::from_secs(1)).is_ok() {
+                std::thread::sleep(Duration::from_millis(50));
+                while rx.try_recv().is_ok() {}
+            }
+            let print = std::mem::replace(&mut first, false);
+            let current = match volume.refresh().and_then(|_| volume.level()) {
+                Ok(current) => current,
+                Err(error) => {
+                    eprintln!("[WARN] read failed: {error}");
+                    continue;
+                }
+            };
+            if print || current != last {
+                println!("{}", describe(current));
+            }
+            last = current;
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod volume {
+    use std::process::ExitCode;
+
+    pub fn print_current() -> ExitCode {
+        eprintln!("The Windows master volume is only available on Windows.");
+        ExitCode::FAILURE
+    }
+
+    pub fn watch() -> ExitCode {
+        print_current()
     }
 }
 
