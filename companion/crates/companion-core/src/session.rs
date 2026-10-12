@@ -1,6 +1,6 @@
-//! One synchronization session: scan, connect, handshake, then mirror the
-//! Windows media session and master volume to Terra and route its buttons and
-//! encoder (M6–M8). Reconnect with backoff is M9.
+//! Synchronization sessions: scan, connect, handshake, then mirror the Windows
+//! media session and master volume to Terra and route its buttons and encoder
+//! (M6–M8). `run_forever` reconnects with bounded backoff after any loss (M9).
 
 use std::fmt;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -14,7 +14,7 @@ use protocol::{
     VolumeState, fragment,
 };
 
-use crate::sync::{MediaInfo, MediaPlayback, media_state, needs_send};
+use crate::sync::{Backoff, MediaInfo, MediaPlayback, media_state, needs_send, no_media_due};
 
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
 /// Events often arrive in bursts (metadata, then playback, then timeline).
@@ -24,6 +24,9 @@ const VOLUME_SETTLE: Duration = Duration::from_millis(50);
 /// Windows reports no volume event when the default playback device changes.
 const DEVICE_POLL: Duration = Duration::from_secs(1);
 const IDLE: Duration = Duration::from_secs(1);
+/// Retry a failed media read; apps can vanish while their session is read.
+const MEDIA_RETRY: Duration = Duration::from_secs(1);
+const NO_MEDIA_GRACE: Duration = Duration::from_millis(crate::sync::NO_MEDIA_GRACE_MS);
 
 #[derive(Debug)]
 pub enum SessionError {
@@ -78,6 +81,15 @@ pub struct SessionOptions {
     pub scan_timeout: Duration,
 }
 
+/// What one session leaves for the next reconnect attempt.
+#[derive(Debug, Default)]
+pub struct Memory {
+    /// Last Terra connected to; preferred when several advertise.
+    pub address: Option<u64>,
+    /// The last session completed the handshake.
+    pub ready: bool,
+}
+
 enum Event {
     Link(LinkEvent),
     MediaChanged,
@@ -113,13 +125,11 @@ fn next_event(rx: &mpsc::Receiver<Event>, pending: &mut Pending) -> Result<Event
             return Ok(event);
         }
         let wait = [pending.media, pending.volume].into_iter().flatten().min().map_or(IDLE, |at| at - now);
+        // A Windows event always gets a read within its settle time, even when a
+        // later recheck (e.g. the NO_MEDIA grace period) is already pending.
         match rx.recv_timeout(wait) {
-            Ok(Event::MediaChanged) => {
-                pending.media.get_or_insert_with(|| Instant::now() + SETTLE);
-            }
-            Ok(Event::VolumeChanged) => {
-                pending.volume.get_or_insert_with(|| Instant::now() + VOLUME_SETTLE);
-            }
+            Ok(Event::MediaChanged) => schedule(&mut pending.media, Some(Instant::now() + SETTLE)),
+            Ok(Event::VolumeChanged) => schedule(&mut pending.volume, Some(Instant::now() + VOLUME_SETTLE)),
             Err(RecvTimeoutError::Timeout) if pending.media.is_some() || pending.volume.is_some() => {}
             event => return event,
         }
@@ -222,24 +232,50 @@ struct MediaSync<'a> {
     reader: &'a MediaReader,
     watch: media_windows::MediaWatch,
     last: Option<(MediaState, Instant)>,
+    /// Since when Windows has reported no playing/paused session.
+    absent_since: Option<Instant>,
 }
 
 impl MediaSync<'_> {
-    fn sync(&mut self, sender: &mut Sender, log: &mut impl FnMut(String)) -> Result<(), SessionError> {
+    /// Sends MEDIA_STATE when it changed meaningfully. Returns when to read
+    /// again without a Windows event: after a failed read, or when a pending
+    /// NO_MEDIA has waited out its grace period.
+    fn sync(&mut self, sender: &mut Sender, log: &mut impl FnMut(String)) -> Result<Option<Instant>, SessionError> {
         if let Err(error) = self.watch.sync() {
             log(format!("[WARN] media resubscribe failed: {error}"));
         }
-        let snapshot = self.reader.current()?;
-        let Some(state) = media_state(snapshot.as_ref().map(media_info).as_ref()) else { return Ok(()) };
+        let snapshot = match self.reader.current() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                log(format!("[WARN] media read failed: {error}"));
+                return Ok(Some(Instant::now() + MEDIA_RETRY));
+            }
+        };
+        let Some(state) = media_state(snapshot.as_ref().map(media_info).as_ref()) else { return Ok(None) };
+        if state.playback == protocol::Playback::NoMedia {
+            let since = *self.absent_since.get_or_insert_with(Instant::now);
+            if !no_media_due(self.last.as_ref().map(|(s, _)| s), since.elapsed().as_millis() as u64) {
+                return Ok(Some(since + NO_MEDIA_GRACE));
+            }
+        } else {
+            self.absent_since = None;
+        }
         let elapsed = self.last.as_ref().map(|(_, at)| at.elapsed().as_millis() as u64).unwrap_or(0);
         if !needs_send(self.last.as_ref().map(|(s, _)| s), &state, elapsed) {
-            return Ok(());
+            return Ok(None);
         }
         let payload = state.encode().map_err(|_| SessionError::Protocol("MEDIA_STATE encode"))?;
         sender.send(MessageType::MediaState, &payload)?;
         log(format!("[MEDIA] {}", describe(&state)));
         self.last = Some((state, Instant::now()));
-        Ok(())
+        Ok(None)
+    }
+}
+
+/// Keeps the earlier of two deadlines.
+fn schedule(slot: &mut Option<Instant>, at: Option<Instant>) {
+    if let Some(at) = at {
+        *slot = Some(slot.map_or(at, |current| current.min(at)));
     }
 }
 
@@ -290,15 +326,45 @@ fn now_ms(start: Instant) -> u32 {
     start.elapsed().as_millis() as u32
 }
 
-/// Runs until the link drops (returns `Ok`) or an error stops the session.
-pub fn run(options: &SessionOptions, mut log: impl FnMut(String)) -> Result<(), SessionError> {
+/// Runs sessions until a protocol mismatch, which is returned: retrying cannot
+/// fix it without updating the firmware or companion. Every other end of a
+/// session (disconnect, Bluetooth off, device gone, Windows API failure) is
+/// logged and followed by a reconnect after a bounded backoff (spec §29).
+pub fn run_forever(options: &SessionOptions, mut log: impl FnMut(String)) -> SessionError {
+    let mut memory = Memory::default();
+    let mut backoff = Backoff::default();
+    loop {
+        match run(options, &mut memory, &mut log) {
+            Err(error @ SessionError::ProtocolMismatch { .. }) => return error,
+            Err(error) => log(format!("[ERROR] {error}")),
+            Ok(()) => {}
+        }
+        if memory.ready {
+            backoff.reset();
+        }
+        let delay = backoff.next_delay_s();
+        log(format!("[BLE] reconnecting in {delay} s"));
+        std::thread::sleep(Duration::from_secs(delay));
+    }
+}
+
+/// Runs one session until the link drops (returns `Ok`) or an error stops it.
+pub fn run(options: &SessionOptions, memory: &mut Memory, mut log: impl FnMut(String)) -> Result<(), SessionError> {
+    memory.ready = false;
     let reader = MediaReader::new()?;
     let address = match options.address {
         Some(address) => address,
         None => {
             log("[BLE] scanning for Terra".into());
-            let found = ble_windows::scan(options.scan_timeout, false)?;
-            let device = found.into_iter().max_by_key(|f| f.rssi).ok_or(SessionError::NotFound)?;
+            let preferred = memory.address;
+            let found = ble_windows::scan_until(options.scan_timeout, |found| {
+                preferred.is_some_and(|address| found.iter().any(|f| f.address == address))
+            })?;
+            let device = found
+                .iter()
+                .find(|f| Some(f.address) == preferred)
+                .or_else(|| found.iter().max_by_key(|f| f.rssi))
+                .ok_or(SessionError::NotFound)?;
             log(format!("[BLE] found {} {} RSSI {} dBm", device.name, device.address_text(), device.rssi));
             device.address
         }
@@ -309,6 +375,7 @@ pub fn run(options: &SessionOptions, mut log: impl FnMut(String)) -> Result<(), 
     let link = Link::connect(address, move |event| {
         let _ = link_tx.send(Event::Link(event));
     })?;
+    memory.address = Some(address);
     log(format!("[BLE] connected, packet size {} bytes", link.max_packet()));
 
     let start = Instant::now();
@@ -342,6 +409,7 @@ pub fn run(options: &SessionOptions, mut log: impl FnMut(String)) -> Result<(), 
     if !accepted {
         return Err(SessionError::ProtocolMismatch { device_version: hello.protocol_version });
     }
+    memory.ready = true;
     if let Ok(status) = link.read_status().map(|bytes| DeviceStatus::decode(&bytes)) {
         if let Ok(status) = status {
             log(format!("[PROTOCOL] device link state {:?}, rx_errors {}", status.link, status.rx_errors));
@@ -356,12 +424,12 @@ pub fn run(options: &SessionOptions, mut log: impl FnMut(String)) -> Result<(), 
         let _ = tx.send(Event::VolumeChanged);
     })?;
 
-    let mut media = MediaSync { reader: &reader, watch, last: None };
+    let mut media = MediaSync { reader: &reader, watch, last: None, absent_since: None };
     let mut volume = VolumeSync { audio, last: None };
-    media.sync(&mut sender, &mut log)?;
+    let mut pending = Pending::default();
+    schedule(&mut pending.media, media.sync(&mut sender, &mut log)?);
     volume.sync(&mut sender, &mut log)?;
 
-    let mut pending = Pending::default();
     let mut polled = Instant::now();
     loop {
         if polled.elapsed() >= DEVICE_POLL {
@@ -370,7 +438,7 @@ pub fn run(options: &SessionOptions, mut log: impl FnMut(String)) -> Result<(), 
         }
         match next_event(&rx, &mut pending) {
             Ok(Event::MediaChanged) => {
-                media.sync(&mut sender, &mut log)?;
+                schedule(&mut pending.media, media.sync(&mut sender, &mut log)?);
             }
             Ok(Event::VolumeChanged) => {
                 volume.sync(&mut sender, &mut log)?;
@@ -402,7 +470,7 @@ pub fn run(options: &SessionOptions, mut log: impl FnMut(String)) -> Result<(), 
                         media.last = None;
                         volume.last = None;
                         log("[PROTOCOL] HELLO again; acknowledged".into());
-                        media.sync(&mut sender, &mut log)?;
+                        schedule(&mut pending.media, media.sync(&mut sender, &mut log)?);
                         volume.sync(&mut sender, &mut log)?;
                     }
                     Some(MessageType::MediaCommand) => {
@@ -471,6 +539,20 @@ mod tests {
         assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::VolumeChanged));
         assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::MediaChanged));
         assert!(pending.media.is_none() && pending.volume.is_none());
+    }
+
+    #[test]
+    fn media_event_is_read_before_a_pending_grace_recheck() {
+        // Regression (12 Oct 2026): a track change during the NO_MEDIA grace
+        // period was only read when the 5 s grace recheck came due.
+        let (tx, rx) = mpsc::channel();
+        let mut pending = Pending { media: Some(Instant::now() + NO_MEDIA_GRACE), volume: None };
+        tx.send(Event::MediaChanged).unwrap();
+        let start = Instant::now();
+        assert!(matches!(next_event(&rx, &mut pending).unwrap(), Event::MediaChanged));
+        assert!(start.elapsed() < Duration::from_secs(1), "read after {:?}", start.elapsed());
+        // The read consumed the slot; the next sync schedules a new recheck itself.
+        assert!(pending.media.is_none());
     }
 
     #[test]

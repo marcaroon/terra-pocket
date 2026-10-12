@@ -9,13 +9,16 @@ Commands:
   volume           Print the Windows master volume of the default playback device (M8)
   volume --watch   Print a line whenever that volume or mute changes
   devices          Scan for Terra devices over Bluetooth LE (M6)
-  connect [ADDR]   Mirror Windows media and volume; handle Terra's buttons and encoder (M8)
-                   ADDR is optional, e.g. 28:84:85:48:15:BA; default: strongest found
+  connect [ADDR]   Mirror Windows media and volume; handle Terra's buttons and encoder
+                   ADDR is optional, e.g. 28:84:85:48:15:BA; default: the Terra last
+                   connected to, otherwise the strongest found
   monitor [ADDR]   Alias of connect; includes live media, volume and command-result logs
   --help, -h       Show this help
   --version, -V    Show the version
 
-The link is not re-established automatically after a disconnect yet (M9).";
+connect/monitor keep running and reconnect after a disconnect, Bluetooth off/on,
+a device restart or PC sleep, retrying after 1, 2, 4, 8, then every 15 s (M9).
+They stop only on a protocol version mismatch (exit 3) or Ctrl+C.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -204,7 +207,7 @@ fn parse_address_text(text: &str) -> Option<u64> {
 
 #[cfg(windows)]
 mod ble {
-    use companion_core::session::{SessionError, SessionOptions, run};
+    use companion_core::session::{SessionOptions, run_forever};
     use std::process::ExitCode;
     use std::time::Duration;
 
@@ -234,20 +237,10 @@ mod ble {
 
     pub fn connect(address: Option<u64>) -> ExitCode {
         let options = SessionOptions { address, scan_timeout: Duration::from_secs(10) };
-        match run(&options, |line| println!("{line}")) {
-            Ok(()) => {
-                println!("Session ended. Run `terra-cli connect` again to reconnect (automatic reconnect: M9).");
-                ExitCode::SUCCESS
-            }
-            Err(error @ SessionError::ProtocolMismatch { .. }) => {
-                eprintln!("{error}");
-                ExitCode::from(3)
-            }
-            Err(error) => {
-                eprintln!("Session failed: {error}");
-                ExitCode::FAILURE
-            }
-        }
+        // Returns only on a protocol mismatch; everything else is retried.
+        let error = run_forever(&options, |line| println!("{line}"));
+        eprintln!("{error}");
+        ExitCode::from(3)
     }
 }
 

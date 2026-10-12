@@ -1,4 +1,4 @@
-# Arsitektur — M8
+# Arsitektur — M9
 
 ## Firmware ESP32-S3
 
@@ -53,9 +53,13 @@ setiap 1 detik. Tanpa perangkat output, perangkat Terra mempertahankan nilai
 terakhir (V1 tidak punya status "volume tidak diketahui" selain sebelum READY).
 `unsafe` (COM) hanya diizinkan di modul `native` crate audio-windows.
 
-Tidak ada pairing/bonding atau ACK command tingkat aplikasi di BLE V1. Belum
-ada reconnect otomatis; sesi berakhir saat link putus. M9 menangani backoff,
-sleep/wake, dan stabilitas. Tauri/tray tetap M10 setelah CLI stabil.
+Tidak ada pairing/bonding atau ACK command tingkat aplikasi di BLE V1.
+`session::run_forever` (M9) menjalankan sesi berulang: setiap akhir sesi selain
+ketidakcocokan versi diikuti backoff 1–15 detik dan scan baru, dengan objek
+WinRT (link, GSMTC, Core Audio) dibuat ulang per sesi agar pulih setelah
+Bluetooth mati/nyala atau sleep/wake. Firmware tidak berubah di M9: setiap
+disconnect, termasuk host reset NimBLE, kembali ke advertising. Tauri/tray tetap
+M10 setelah CLI stabil.
 
 ## Website dan NAS
 
@@ -68,6 +72,6 @@ sudah aktif. HDD tidak diformat atau ditulis.
 
 Bukti dan sisa pemeriksaan M0–M6 ada di [validation.md](validation.md).
 M7 harus melewati [uji tombol](m7-test.md) sebelum diterima penuh.
-M8 volume harus melewati [uji volume](m8-test.md). Selanjutnya M9 reliability →
-M10 GUI/tray. Wire format mengikuti
+M8 volume harus melewati [uji volume](m8-test.md), M9 [uji keandalan](m9-test.md).
+Selanjutnya M10 GUI/tray. Wire format mengikuti
 [ble-protocol.md](ble-protocol.md), bukan asumsi dari mock UI.

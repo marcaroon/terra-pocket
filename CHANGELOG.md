@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — M9 keandalan (2026-10-12)
+
+- `connect`/`monitor` tidak lagi berhenti saat link putus: sesi diulang dengan
+  backoff 1, 2, 4, 8, 15 s (reset setelah READY), alamat Terra terakhir
+  diutamakan dan scan berhenti begitu terlihat. Hanya ketidakcocokan protokol
+  yang mengakhiri program (exit 3).
+- `ble-windows`: `scan_until`, dan watcher yang `Aborted` (Bluetooth mati)
+  dilaporkan sebagai `RadioUnavailable`, bukan "tidak ditemukan".
+- Kegagalan baca GSMTC dicatat dan diulang 1 s alih-alih memutus BLE.
+- NO_MEDIA ditahan 5 s saat lagu sebelumnya masih tampil, menghilangkan kedipan
+  "Nothing Playing" di antara lagu Chrome/YouTube Music.
+- Event GSMTC selalu dibaca dalam 150 ms meski pembacaan ulang penundaan
+  NO_MEDIA sudah terjadwal (sebelumnya judul baru tertunda 6–7 s setelah Next).
+- Sesi tanpa judul dan artis (Spotify saat ditutup) diperlakukan sebagai NO_MEDIA.
+- Firmware tidak berubah (0.4.0). Diuji di hardware: Bluetooth off/on, restart ESP,
+  sleep/wake, Chrome ↔ Spotify, companion mati paksa dan dijalankan ulang.
+  Panduan [uji M9](docs/m9-test.md).
+
 ## Unreleased — M8 volume (2026-10-12)
 
 - Firmware 0.4.0: encoder mengirim VOLUME_DELTA +2/−2 per klik dan tombol encoder

@@ -1,5 +1,63 @@
 # Laporan validasi
 
+## M9 keandalan — 12 Oktober 2026
+
+**Software:** companion `connect`/`monitor` menjalankan sesi berulang dengan
+backoff 1/2/4/8/15 s, mengutamakan alamat terakhir, mendeteksi watcher BLE
+`Aborted` (radio mati), menahan NO_MEDIA 5 s, dan tidak lagi mengakhiri sesi
+karena satu pembacaan GSMTC gagal (dicoba ulang 1 s). 17 tes Rust lulus.
+Firmware tidak diubah: source NimBLE `ble_gap_reset_state` melaporkan disconnect
+untuk tiap koneksi saat host reset, sehingga transport sudah kembali ke ADVERTISING.
+
+**Hardware tested oleh pengembang (firmware 0.4.0, COM11):**
+
+- ESP restart lewat pulsa EN (RTS): companion `disconnected` → `reconnecting in 1 s`
+  → READY lagi; reset 21:57:52, HELLO_ACK 21:58:05.
+- Companion dimatikan paksa: Windows memutus link 13 s kemudian (reason 0x213),
+  firmware kembali advertising. Watchdog handshake firmware tidak diperlukan.
+- Companion dijalankan ulang segera setelah dimatikan: scan pertama tidak
+  menemukan Terra karena link lama masih dipegang Windows, percobaan berikutnya
+  READY 24 s setelah restart. Sebelum M9 kasus ini berakhir dengan exit 1.
+
+**Uji pengguna 21.59–22.05 (log companion `.tools/m9-companion2.log`):**
+
+- Satu kali link putus 22:01:10 (firmware reason 0x215). Companion
+  `disconnected` → scan gagal dengan jeda 1, 2, 4, 8 s → READY 22:02:09 tanpa
+  dijalankan ulang; lagu dan volume tersinkron lagi. Tidak muncul
+  `RadioUnavailable`: watcher tidak teramati `Aborted` pada rangkaian ini, jadi
+  scan berakhir sebagai "not found". Jenis gangguan (Bluetooth off atau sleep)
+  belum dikonfirmasi pengguna.
+- Chrome → Spotify (22:04:41) → Chrome (22:04:55): LCD mengikuti sesi Windows.
+- Encoder 58 → 0 → 12: setiap klik satu command; di 0 tetap 0 tanpa VOLUME_STATE berulang.
+- Next 2×: tidak ada kedipan NO_MEDIA, tetapi judul baru baru tampil 6–7 s setelah
+  tekan (log: lagu baru sudah berjalan 2,7 s saat dikirim).
+- **Bug ditemukan dan diperbaiki:** selama penundaan NO_MEDIA, event GSMTC tidak
+  memajukan pembacaan yang sudah dijadwalkan 5 s kemudian. Sekarang setiap event
+  dibaca dalam 150 ms; tes regresi `media_event_is_read_before_a_pending_grace_recheck`.
+
+**Uji ulang pengguna 22.06–22.12 (`.tools/m9-companion3.log`, setelah perbaikan):**
+
+- Pengguna mengonfirmasi putus 22:01 berasal dari **Bluetooth Windows dimatikan**;
+  pemulihan otomatis seperti di atas. `RadioUnavailable` tidak terpicu pada
+  laptop ini: scan saat radio mati berakhir tanpa hasil ("not found"). Perilaku
+  ini dicatat; pesan log kurang spesifik tetapi pemulihan tidak terpengaruh.
+- **Sleep/wake:** tidak ada disconnect BLE selama sleep (Modern Standby menjaga
+  link); LCD tetap menampilkan lagu, dan sinkronisasi berlanjut setelah bangun
+  tanpa menjalankan ulang companion. Konfirmasi pengguna.
+- Next 3/3: judul baru tampil ±2 s setelah tekan (sebelum perbaikan 6–7 s);
+  pengguna mengonfirmasi sesuai, tanpa kedipan NO_MEDIA.
+- Perpindahan aplikasi: Windows memilih sesi aplikasi media yang terakhir
+  difokus; LCD berpindah Chrome (Playing) ↔ Spotify (Paused) mengikuti jendela.
+  Ini kebijakan GSMTC yang diikuti spesifikasi §18; pengguna menilainya sesuai.
+- Spotify ditutup: Windows sempat melaporkan sesi Spotify Paused tanpa judul/
+  artis (LCD "Unknown title" ±0,24 s) sebelum Chrome. Diperbaiki: sesi tanpa
+  judul dan artis diperlakukan sebagai NO_MEDIA (ikut penundaan 5 s). Tes unit;
+  18 tes Rust lulus.
+
+Status M9: **diterima** untuk skenario spesifikasi (Bluetooth off/on, ESP restart,
+pergantian/penutupan aplikasi media, sleep/wake, companion mati/dijalankan ulang).
+Perbaikan metadata kosong belum diulang di hardware.
+
 ## Pemeriksaan ulang M7 dan implementasi M8 — 12 Oktober 2026
 
 **Pemeriksaan ulang M7 (software):** sebelum perubahan M8, `scripts/test-host.ps1`

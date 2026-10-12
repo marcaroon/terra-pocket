@@ -2,7 +2,7 @@
 //!
 //! Transport only: scanning, connecting, service discovery, TX notifications,
 //! RX writes and the DEVICE STATUS read. It knows nothing about the protocol
-//! payloads; `companion-core` drives the handshake. Automatic reconnect is M9.
+//! payloads; `companion-core` drives the handshake and reconnects (M9).
 #![cfg(windows)]
 
 use std::fmt;
@@ -10,7 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use windows::Devices::Bluetooth::Advertisement::{
-    BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher, BluetoothLEScanningMode,
+    BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher,
+    BluetoothLEAdvertisementWatcherStatus, BluetoothLEScanningMode,
 };
 use windows::Devices::Bluetooth::GenericAttributeProfile::{
     GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue, GattCommunicationStatus,
@@ -41,6 +42,8 @@ pub enum BleError {
     /// A GATT operation completed with a non-success status.
     Gatt(&'static str, i32),
     NotFound(&'static str),
+    /// The scan stopped on its own: Bluetooth is off or the adapter is gone.
+    RadioUnavailable,
 }
 
 impl fmt::Display for BleError {
@@ -52,6 +55,7 @@ impl fmt::Display for BleError {
             }
             Self::Gatt(what, status) => write!(f, "{what} failed (GATT status {status})"),
             Self::NotFound(what) => write!(f, "{what} not found"),
+            Self::RadioUnavailable => f.write_str("Bluetooth is off or the adapter is unavailable"),
         }
     }
 }
@@ -112,6 +116,11 @@ impl Found {
 /// Active scan for Terra advertisements (name in the advertisement, service UUID
 /// in the scan response). Returns early once a device is found if `first_only`.
 pub fn scan(timeout: Duration, first_only: bool) -> Result<Vec<Found>> {
+    scan_until(timeout, |found| first_only && !found.is_empty())
+}
+
+/// Like `scan`, but returns as soon as `done` accepts the devices seen so far.
+pub fn scan_until(timeout: Duration, mut done: impl FnMut(&[Found]) -> bool) -> Result<Vec<Found>> {
     let watcher = BluetoothLEAdvertisementWatcher::new()?;
     watcher.SetScanningMode(BluetoothLEScanningMode::Active)?;
     let found: Arc<Mutex<Vec<Found>>> = Arc::default();
@@ -142,16 +151,24 @@ pub fn scan(timeout: Duration, first_only: bool) -> Result<Vec<Found>> {
         }
         Ok(())
     }))?;
-    watcher.Start()?;
+    let started = watcher.Start();
     let deadline = Instant::now() + timeout;
-    while Instant::now() < deadline {
+    let mut aborted = started.is_err();
+    while !aborted && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(100));
-        if first_only && !found.lock().unwrap_or_else(|p| p.into_inner()).is_empty() {
+        if done(&found.lock().unwrap_or_else(|p| p.into_inner())) {
             break;
         }
+        // Documented WinRT behavior: with the radio off the watcher moves to
+        // Aborted instead of failing Start.
+        aborted = watcher.Status().map(|s| s == BluetoothLEAdvertisementWatcherStatus::Aborted).unwrap_or(false);
     }
-    watcher.Stop()?;
+    let _ = watcher.Stop();
     watcher.RemoveReceived(token)?;
+    started?;
+    if aborted {
+        return Err(BleError::RadioUnavailable);
+    }
     let list = found.lock().unwrap_or_else(|p| p.into_inner()).clone();
     Ok(list)
 }

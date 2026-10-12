@@ -29,12 +29,17 @@ Tombol media, encoder volume, dan tombol mute dikirim hanya di READY. Perintah a
 dan waktu: dibuang setelah disconnect/re-handshake atau usia >500 ms, tidak
 diputar ulang saat tersambung kembali. LCD menunggu MEDIA_STATE/VOLUME_STATE dari Windows.
 
-## Companion (M6–M8 berjalan; retry M9 belum)
+## Companion (M6–M9 berjalan)
 
 DISCONNECTED → SCANNING → CONNECTING → DISCOVERING → HANDSHAKE → CONNECTED.
-Gagal/disconnect mengakhiri sesi; pengguna menjalankan ulang CLI. Rencana M9:
-retry 1, 2, 4, 8, 15, 15 detik tanpa busy-loop scan.
-Ketidakcocokan versi menghentikan sinkronisasi dan ditampilkan.
+Gagal atau disconnect di tahap mana pun → DISCONNECTED → tunggu → SCANNING lagi
+(M9). Jeda 1, 2, 4, 8, lalu 15 detik berulang, tanpa busy-loop scan; kembali ke
+1 detik setelah sesi mencapai READY. Scan berhenti lebih awal begitu Terra yang
+terakhir tersambung terlihat. Radio Bluetooth mati terdeteksi (watcher Aborted)
+dan diperlakukan sama. Ketidakcocokan versi menghentikan sinkronisasi (exit 3).
+Pembacaan GSMTC yang gagal dicatat dan diulang 1 detik tanpa memutus BLE.
+NO_MEDIA menggantikan lagu yang tampil hanya setelah tidak ada sesi aktif selama
+5 detik (celah antar-lagu Chrome); sesi yang kembali membatalkan penundaan.
 Di CONNECTED, sinyal media digabung selama 150 ms; paket BLE tetap diproses
 berurutan tanpa ikut dibuang. MEDIA_COMMAND divalidasi lalu diarahkan ke sesi
 GSMTC yang aktif saat perintah diterima. Kegagalan perintah dicatat dan tidak
