@@ -1,0 +1,8 @@
+{
+  "name": "artwork_begin_too_large",
+  "kind": "artwork_begin",
+  "expect": "malformed",
+  "note": "32769 bytes",
+  "bytes": "010000000100f000f00001800000",
+  "fields": []
+}

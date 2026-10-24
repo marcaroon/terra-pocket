@@ -1,107 +1,95 @@
-# Arsitektur
+# Arsitektur — M10 + V2 album artwork
 
-## Implementasi M0/M1
+## Firmware ESP32-S3
 
 ```text
-app_main (inisialisasi)
-  ├── app_state_init / app_state_load_mock
-  └── display_init / display_render(snapshot)
-        ├── esp_lcd → SPI DMA → ST7789
-        └── ui_render → LVGL → task/timer esp_lvgl_port
+app_main: NVS → app_state → display/UI → input → BLE → USB probe opsional
+  physical_input → debounce/encoder → antrean input → app_main
+    → ble_transport_send_command → antrean transport → TX notify
+  NimBLE GAP/GATT → antrean transport → handshake/reassembler/codec
+    → app_state (mutex) → snapshot → timer LVGL → ST7789 240×240
 ```
 
-`app_main.c` hanya mengoordinasikan startup. `app_state.c` memiliki state kanonik
-dan mutex; pembaca memperoleh salinan, tanpa menyimpan pointer ke state internal.
-`display.c` memiliki panel, SPI, dan lock LVGL. `ui.c` satu-satunya pembuat widget.
-Tidak ada task buatan tambahan untuk layar statis, input, atau BLE pada M1.
-Build menggunakan `MINIMAL_BUILD` ESP-IDF: hanya komponen utama dan dependency
-yang dibutuhkan yang dimasukkan.
+`ble_service` menangani GAP/GATT; `ble_transport` memiliki handshake, sequence,
+reassembly, dan pengiriman TX. Callbacks tidak menyentuh LVGL. Antrean transport
+16 event; RX nonblocking, lifecycle dapat menunggu 50 ms. `app_main` meneruskan
+tiga tombol media, encoder (VOLUME_DELTA ±2) dan tombol encoder (MUTE_TOGGLE)
+tanpa menunggu BLE. Perintah lokal diberi identitas sesi READY serta batas umur
+500 ms. Overflow dicatat. Layar volume hanya berubah oleh VOLUME_STATE.
 
-Rendering menggunakan dua buffer RGB565 masing-masing 240×40×2 = 19.200 byte
-di RAM internal yang mendukung DMA. PSRAM tetap diinisialisasi dan diuji saat
-boot untuk memastikan konfigurasi N16R8. M1 belum memerlukannya untuk framebuffer.
-Kegagalan inisialisasi bersifat fatal dan dicatat; belum ada jalur parser BLE.
+Artwork (V2): transport menerima ARTWORK_BEGIN/CHUNK/END ke buffer JPEG 32 KB di
+PSRAM (`artwork_rx`, CRC-32), lalu men-decode dengan TJpgDec ROM ESP32-S3 menjadi
+RGB565 240×240 (`artwork_decode`). `app_state` menyimpan salinan di PSRAM dengan
+nomor versi; timer UI menyalin ke buffer LVGL di dalam task LVGL hanya saat
+versi berubah, sehingga gambar tidak pernah diubah saat sedang digambar. Lagu
+berganti, disconnect, atau HELLO baru menghapus artwork. Tampilan (teks atau
+cover layar penuh) dipilih dengan tekan lama encoder, disimpan di NVS
+(`terra/view`), dan hanya memengaruhi layar lokal.
 
-Layar menggunakan bidang persegi 240×240. Inversion, byte order, gap, dan mirror
-adalah parameter board, bukan konstanta di renderer. Backlight diaktifkan setelah
-render pertama. State contoh tidak menyimulasikan koneksi nyata atau progres waktu.
+`app_state` adalah sumber state layar dengan mutex. UI dibuat sekali lalu
+diperbarui setiap 200 ms. Progres PLAYING diinterpolasi lokal. Metadata tidak
+diubah secara optimistis setelah tombol ditekan. Disconnect menghapus media
+lama. Buffer SPI DMA RGB565 berada di RAM internal; PSRAM octal 8 MB diverifikasi.
 
-## Fondasi companion
+Profil `normal`: console USB native. Profil `usb-probe`: console COM/UART,
+USB native menjadi host. N0 hanya READ(10) sektor metadata, tanpa mount,
+NTFS driver, operasi tulis, atau file server. Power HDD belum terverifikasi.
 
-Enam crate sudah terdaftar dalam workspace. Saat ini hanya `companion-core::VERSION`
-dan CLI informasi versi yang berfungsi. Tidak ada dependency eksternal Rust.
+## Companion Windows
 
-| Crate | Tanggung jawab tahap berikutnya |
+| Crate | Implementasi |
 | --- | --- |
-| protocol | Codec biner, fragmentasi, validasi, shared vectors (M4) |
-| media-windows | GSMTC: snapshot dan langganan perubahan (M5, berjalan); perintah media (M7) |
-| audio-windows | Core Audio volume/mute dan callback perubahan (M8) |
-| ble-windows | Windows central: scan, GattSession, discovery, notify, write (M6, berjalan); reconnect (M9) |
-| companion-core | Aturan sinkronisasi murni + sesi media→BLE (M6, berjalan); koordinator penuh di M7–M9 |
-| companion-cli | Diagnostik sebelum GUI |
+| protocol | Codec V1/fragment/reassembly; 57 vector bersama C/Rust/Python |
+| media-windows | GSMTC: sesi aktif, metadata/timeline/event, perintah M7, thumbnail → JPEG 240×240 (Windows.Graphics.Imaging, V2) |
+| ble-windows | WinRT scan/connect/discovery/notify/write/status; cleanup saat gagal/drop |
+| companion-core | Handshake, sinkronisasi bermakna, routing command; tidak memiliki UI |
+| audio-windows | Core Audio `IAudioEndpointVolume`: perangkat output default, baca/step/mute, callback perubahan |
+| companion-cli | media, media --watch, volume, volume --watch, devices, connect, monitor |
+| app (Tauri 2) | Jendela React + tray; memanggil `run_forever` lewat thread, `Control` stop/reconnect, event `status` |
 
-`windows-rs` dan Tokio akan ditambahkan saat dibutuhkan. Tauri 2, React, TypeScript
-baru masuk M10. GUI adalah thin client Rust melalui command/event.
+`connect`/`monitor`: scan atau alamat eksplisit → discovery → subscribe TX →
+HELLO/ACK → sinkronisasi. Event GSMTC digabung 150 ms tanpa membuang paket BLE
+yang menyela. Command divalidasi lalu dijalankan sekali pada sesi Windows aktif.
+Hasil Accepted/Rejected/Unsupported/NoSession dicatat; kegagalan command tidak
+memutus sinkronisasi. Setelah request, companion membaca ulang state Windows
+dan tetap menerima event perubahan. Kode Windows API tetap di crate native.
 
-## M2 input dan N0 diagnostik USB
+Volume (M8): VOLUME_DELTA dihitung dari persen bulat saat ini, di-clamp 0–100
+(spesifikasi §20), lalu dibaca ulang dan dikirim sebagai VOLUME_STATE. Mute
+tidak diubah oleh delta. Callback Core Audio digabung 50 ms; VOLUME_STATE hanya
+dikirim bila nilai/mute berubah. Windows tidak memberi event volume saat
+perangkat output default berganti, jadi companion memeriksa perangkat default
+setiap 1 detik. Tanpa perangkat output, perangkat Terra mempertahankan nilai
+terakhir (V1 tidak punya status "volume tidak diketahui" selain sebelum READY).
+`unsafe` (COM) hanya diizinkan di modul `native` crate audio-windows.
 
-M2: GPIO active-low → task sampling 1 ms → filter tombol 40 ms / decoder encoder
-half-step/full-step (board_config) → queue 32 event → loop aplikasi mencatat perintah serial. Input tidak
-memanggil BLE atau LVGL. Queue penuh menghasilkan laporan kehilangan event.
-Tidak ada long-press/double-click atau perubahan state media buatan.
+Tidak ada pairing/bonding atau ACK command tingkat aplikasi di BLE V1.
+`session::run_forever` (M9) menjalankan sesi berulang: setiap akhir sesi selain
+ketidakcocokan versi diikuti backoff 1–15 detik dan scan baru, dengan objek
+WinRT (link, GSMTC, Core Audio) dibuat ulang per sesi agar pulih setelah
+Bluetooth mati/nyala atau sleep/wake. Firmware tidak berubah di M9: setiap
+disconnect, termasuk host reset NimBLE, kembali ke advertising. Tauri/tray tetap
+M10 setelah CLI stabil.
 
-N0 opsional: USB Host event task + MSC task → queue lifecycle → probe task dengan
-satu handle disk. Hanya inquiry/read-capacity/read-sector; tanpa VFS/mount.
-Parser metadata murni memvalidasi rentang MBR sebelum read pertama partisi.
-Signature NTFS bukan implementasi filesystem. GPT hanya dikenali lewat protective
-MBR. Overflow queue menghentikan probe sampai reboot; tidak meneruskan dengan
-handle yang kehilangan event. Log memakai UART0 agar PHY native bebas untuk host.
+## Website dan NAS
 
-Dependency terkunci: usb_host_msc 1.3.0 dan usb 1.6.0. Pada ESP-IDF **6.0.3**, driver
-MSC ini masih memakai jalur diskio lama; BDL baru aktif mulai 6.0.4 menurut header
-dan CMake driver, meskipun README driver menyebut 6.0+. Probe memakai
-`scsi_cmd_read10` sesuai pengganti API read-sector yang deprecated, dengan versi
-driver dikunci karena header berlabel `esp_private`. Tidak ada patch vendor.
+`web-console` adalah prototipe statis berisi file contoh/draf konfigurasi browser;
+belum terhubung ke API perangkat. NTFS read-only, akses LAN, dan relay cloud masih
+proposal di [nas-proposal.md](nas-proposal.md). Penyelesaian M7 tidak berarti NAS
+sudah aktif. HDD tidak diformat atau ditulis.
 
-## M3 BLE GATT dan M4 protokol
+## Urutan penerimaan
 
-```text
-NimBLE host task ── access/GAP callback ── salin paket/event ──► queue 16
-                                                                   │
-ble_transport task: reassembler → validasi payload → handshake ────┤
-        │                       └─ ERROR / HELLO via fragmenter ──► notify TX
-        └─ app_state_set_link / apply_media / apply_volume (mutex, revision)
-                                                                   │
-LVGL task: timer 200 ms → snapshot app_state → ui_update (hanya yang berubah)
-```
+Bukti dan sisa pemeriksaan M0–M6 ada di [validation.md](validation.md).
+M7 harus melewati [uji tombol](m7-test.md) sebelum diterima penuh.
+M8 volume harus melewati [uji volume](m8-test.md), M9 [uji keandalan](m9-test.md).
+M10 aplikasi: [uji aplikasi](m10-test.md).
 
-`ble/ble_service.c` hanya NimBLE: advertising `Terra`, service dan tiga
-karakteristik, MTU, subscribe. Callback tidak memanggil LVGL maupun parser; paket
-RX disalin ke queue. `ble/ble_transport.c` adalah satu-satunya pemilik state link,
-reassembler, sequence TX, dan penghitung `rx_errors`. `protocol/protocol.c` murni
-C tanpa header ESP-IDF sehingga dites di host dengan vector bersama.
-
-UI dibuat sekali (`ui_create`), lalu timer LVGL memperbarui label dari salinan
-state. Posisi lagu dihitung lokal (`timeline_position_ms`) dari posisi dasar dan
-waktu terima; BLE tidak mengirim posisi berkala. Status link dan playback adalah
-enum terpisah. Link selain READY menghapus metadata agar reconnect tidak
-menampilkan data basi. Input masih hanya dicatat; MEDIA_COMMAND dikirim di M7.
-
-Sisi PC: crate Rust `protocol` mengimplementasikan codec yang sama. Untuk uji
-M3/M4 sebelum companion Windows BLE (M6) ada harness dev `scripts/ble-test.py`
-(bleak) yang memakai referensi Python `scripts/terra_protocol.py`.
-
-## Urutan berikutnya
-
-Pembaruan Oktober menambahkan `web-console/`, prototipe statis terpisah dengan
-file contoh dan draf konfigurasi browser. Belum ada API ke firmware, NAS, relay,
-atau perubahan scope companion Tauri M10. Arsitektur NAS ESP32-only masih proposal
-di [nas-proposal.md](nas-proposal.md), menunggu keputusan pengguna.
-
-M2 acceptance hardware → M3 GATT → M4 protokol → M5 media reader → M6 BLE Windows → M7 kontrol
-media → M8 volume → M9 reliability → M10 GUI/tray. Setiap tahap harus berhasil
-build sebelum berlanjut. M3/M4 sudah diimplementasikan; penerimaan hardware
-menunggu uji `scripts/ble-test.py` pada perangkat (lihat validation.md).
-
-Backlog V2: artwork, transport alternatif, OTA, baterai, dan fitur lain pada
-PROJECT_SPEC bagian 35–36; tidak ada implementasinya di sini.
+Aplikasi M10 (`companion/app`) tidak berisi logika BLE/media/audio. Sesi
+melaporkan `Update` (log, fase link, MEDIA_STATE dan VOLUME_STATE yang terkirim);
+`src-tauri/status.rs` melipatnya menjadi status jendela/tray dan memancarkan
+event `status`. React hanya memanggil command dan menampilkan status. Setiap
+thread sesi punya nomor generasi; update dari sesi yang sedang dihentikan
+diabaikan. Satu instance dijaga plugin single-instance; startup Windows memakai
+entri per pengguna dari plugin autostart dengan argumen `--minimized`. Wire format mengikuti
+[ble-protocol.md](ble-protocol.md), bukan asumsi dari mock UI.

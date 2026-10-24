@@ -22,6 +22,14 @@ Label HDD 5 V 0,55 A; datasheet WD menyatakan arus puncak 1 A. Rancangan suplai
 Cloudflare Workers + Durable Objects Free dibahas untuk relay dengan kuota;
 Vercel tetap opsi frontend. Tidak ada layanan relay yang diaktifkan.
 
+Amendment 12 Oktober 2026 (lanjutan): setelah MVP M0–M10, pengguna meminta
+melanjutkan ke V2. Album artwork (§36) dipindahkan dari backlog §35 dan
+diimplementasikan; wire format ARTWORK_BEGIN/CHUNK/END ditetapkan di
+`docs/ble-protocol.md` §4.8. Butir backlog lain tetap tidak dikerjakan.
+Setelah melihat tata letak 160×160, pengguna meminta cover layar penuh: artwork
+menjadi 240×240 dan ditampilkan sebagai tampilan tersendiri, bergantian dengan
+tampilan teks lewat tekan lama encoder (≥ 0,6 s); tekan singkat tetap mute.
+
 Amendment 12 Oktober 2026: M3/M4 diimplementasikan. Keputusan protokol yang
 sebelumnya terbuka (sequence, reassembly, ERROR, HELLO_ACK, DEVICE_STATUS, waktu
 HELLO) ditetapkan di `docs/ble-protocol.md`, yang kini menjadi spesifikasi wire

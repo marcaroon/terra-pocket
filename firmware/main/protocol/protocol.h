@@ -1,6 +1,7 @@
 #pragma once
 
-/* Terra BLE protocol V1 codec, framing and reassembly (docs/ble-protocol.md).
+/* Terra BLE protocol V1 codec, framing and reassembly (docs/ble-protocol.md),
+ * including the V2 album artwork messages (§4.8).
  * Pure C: no ESP-IDF dependencies, so it is unit-tested on the host against
  * docs/protocol-test-vectors. Never trusts input lengths. */
 #include <stdbool.h>
@@ -24,6 +25,9 @@ typedef enum {
     PROTOCOL_MSG_MEDIA_COMMAND = 0x20,
     PROTOCOL_MSG_DEVICE_STATUS = 0x30,
     PROTOCOL_MSG_ERROR = 0x40,
+    PROTOCOL_MSG_ARTWORK_BEGIN = 0x50,
+    PROTOCOL_MSG_ARTWORK_CHUNK = 0x51,
+    PROTOCOL_MSG_ARTWORK_END = 0x52,
 } protocol_msg_type_t;
 
 /* Reassembly drop reasons; several may be reported for one packet. */
@@ -75,6 +79,12 @@ typedef enum {
 #define PROTOCOL_CAP_MEDIA_STATE   0x0001
 #define PROTOCOL_CAP_VOLUME_STATE  0x0002
 #define PROTOCOL_CAP_MEDIA_COMMAND 0x0004
+#define PROTOCOL_CAP_ARTWORK       0x0008
+
+#define PROTOCOL_ARTWORK_JPEG         1
+#define PROTOCOL_ARTWORK_SIDE         240 /* full screen */
+#define PROTOCOL_ARTWORK_MAX_BYTES    32768
+#define PROTOCOL_ARTWORK_CHUNK_HEADER 8
 
 typedef struct {
     uint8_t playback;
@@ -96,6 +106,20 @@ typedef struct {
     uint16_t rx_errors;
 } protocol_status_t;
 typedef struct { uint8_t code, related_type, related_seq; } protocol_error_t;
+/* size 0 (with every other field 0) means the current track has no artwork. */
+typedef struct {
+    uint32_t id;
+    uint8_t format;
+    uint16_t width, height;
+    uint32_t size;
+} protocol_artwork_begin_t;
+typedef struct {
+    uint32_t id;
+    uint32_t offset;
+    uint16_t length;
+    const uint8_t *data; /* points into the decoded payload */
+} protocol_artwork_chunk_t;
+typedef struct { uint32_t id, crc32; } protocol_artwork_end_t;
 
 /* Payload codecs. Decoders return false for any malformed payload. Encoders
  * return the number of bytes written, or 0 if the value is invalid or the
@@ -115,6 +139,14 @@ bool protocol_decode_status(const uint8_t *data, size_t length, protocol_status_
 size_t protocol_encode_status(const protocol_status_t *in, uint8_t *out, size_t capacity);
 bool protocol_decode_error(const uint8_t *data, size_t length, protocol_error_t *out);
 size_t protocol_encode_error(const protocol_error_t *in, uint8_t *out, size_t capacity);
+bool protocol_decode_artwork_begin(const uint8_t *data, size_t length, protocol_artwork_begin_t *out);
+size_t protocol_encode_artwork_begin(const protocol_artwork_begin_t *in, uint8_t *out, size_t capacity);
+bool protocol_decode_artwork_chunk(const uint8_t *data, size_t length, protocol_artwork_chunk_t *out);
+size_t protocol_encode_artwork_chunk(const protocol_artwork_chunk_t *in, uint8_t *out, size_t capacity);
+bool protocol_decode_artwork_end(const uint8_t *data, size_t length, protocol_artwork_end_t *out);
+size_t protocol_encode_artwork_end(const protocol_artwork_end_t *in, uint8_t *out, size_t capacity);
+/* CRC-32/ISO-HDLC (zlib). Pass the previous result to continue over several buffers. */
+uint32_t protocol_crc32(uint32_t crc, const uint8_t *data, size_t length);
 
 /* Fragmentation for an ATT MTU (packet length = MTU - 3). Returns the packet
  * count, or 0 if the payload is too large or the MTU too small. */

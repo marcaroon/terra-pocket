@@ -1,5 +1,5 @@
 //! Companion core: cross-domain coordination between the Windows media session,
-//! the BLE link and (later) system audio. Native APIs stay in their crates;
+//! the BLE link and the Windows master volume. Native APIs stay in their crates;
 //! frontends (CLI now, Tauri in M10) only call into this crate.
 
 pub mod sync;

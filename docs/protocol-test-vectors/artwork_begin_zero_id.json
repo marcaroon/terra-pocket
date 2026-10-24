@@ -1,0 +1,8 @@
+{
+  "name": "artwork_begin_zero_id",
+  "kind": "artwork_begin",
+  "expect": "malformed",
+  "note": "id 0 with data",
+  "bytes": "000000000100f000f00064000000",
+  "fields": []
+}

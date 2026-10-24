@@ -11,6 +11,7 @@ typedef enum {
     INPUT_MUTE,
     INPUT_VOLUME_UP,
     INPUT_VOLUME_DOWN,
+    INPUT_VIEW_TOGGLE,
 } input_event_t;
 
 esp_err_t input_init(void);

@@ -1,4 +1,5 @@
-"""Reference implementation of the Terra BLE protocol V1 (docs/ble-protocol.md).
+"""Reference implementation of the Terra BLE protocol V1 (docs/ble-protocol.md),
+including the V2 album artwork messages (§4.8).
 
 Used to generate the shared test vectors and by the BLE test harness. The
 firmware (C) and companion (Rust) implementations are independent and must
@@ -7,6 +8,7 @@ agree with the vectors this module produces.
 from __future__ import annotations
 
 import struct
+import zlib
 from dataclasses import dataclass, field
 
 VERSION = 1
@@ -20,6 +22,15 @@ MEDIA_STATE, VOLUME_STATE = 0x10, 0x11
 MEDIA_COMMAND = 0x20
 DEVICE_STATUS = 0x30
 ERROR = 0x40
+ARTWORK_BEGIN, ARTWORK_CHUNK, ARTWORK_END = 0x50, 0x51, 0x52
+
+CAP_MEDIA_STATE, CAP_VOLUME_STATE, CAP_MEDIA_COMMAND, CAP_ARTWORK = 0x1, 0x2, 0x4, 0x8
+CAPS_ALL = 0xF
+
+ARTWORK_JPEG = 1
+ARTWORK_SIDE = 240  # full 240x240 screen
+ARTWORK_MAX_BYTES = 32768
+ARTWORK_CHUNK_HEADER = 8
 
 NO_MEDIA, PLAYING, PAUSED = 0, 1, 2
 PLAY_PAUSE, NEXT, PREVIOUS, VOLUME_DELTA, MUTE_TOGGLE, SEEK_DELTA = range(1, 7)
@@ -118,7 +129,7 @@ def decode_hello(data: bytes) -> tuple[int, int, int, int, int]:
     if len(data) != 6:
         raise Malformed("size")
     fields = struct.unpack("<BBBBH", data)
-    if fields[4] & ~0x7:
+    if fields[4] & ~CAPS_ALL:
         raise Malformed("caps")
     return fields
 
@@ -156,6 +167,64 @@ def decode_error(data: bytes) -> tuple[int, int, int]:
     if len(data) != 3 or not 1 <= data[0] <= 5:
         raise Malformed("error")
     return tuple(data)
+
+
+def crc32(data: bytes) -> int:
+    """CRC-32/ISO-HDLC (zlib): reflected 0xEDB88320, init and xorout 0xFFFFFFFF."""
+    return zlib.crc32(data) & 0xFFFFFFFF
+
+
+def encode_artwork_begin(artwork_id: int, size: int, fmt: int = ARTWORK_JPEG,
+                         width: int = ARTWORK_SIDE, height: int = ARTWORK_SIDE,
+                         reserved: int = 0) -> bytes:
+    return struct.pack("<IBBHHI", artwork_id, fmt, reserved, width, height, size)
+
+
+def encode_artwork_clear() -> bytes:
+    return encode_artwork_begin(0, 0, 0, 0, 0)
+
+
+def decode_artwork_begin(data: bytes) -> tuple[int, int, int, int, int]:
+    """(artwork_id, format, width, height, size); size 0 means "no artwork"."""
+    if len(data) != 14:
+        raise Malformed("size")
+    artwork_id, fmt, reserved, width, height, size = struct.unpack("<IBBHHI", data)
+    if reserved != 0:
+        raise Malformed("reserved")
+    if size == 0:
+        if (artwork_id, fmt, width, height) != (0, 0, 0, 0):
+            raise Malformed("clear")
+    elif (artwork_id == 0 or fmt != ARTWORK_JPEG or (width, height) != (ARTWORK_SIDE, ARTWORK_SIDE)
+          or size > ARTWORK_MAX_BYTES):
+        raise Malformed("artwork")
+    return artwork_id, fmt, width, height, size
+
+
+def encode_artwork_chunk(artwork_id: int, offset: int, chunk: bytes) -> bytes:
+    return struct.pack("<II", artwork_id, offset) + chunk
+
+
+def decode_artwork_chunk(data: bytes) -> tuple[int, int, bytes]:
+    if len(data) <= ARTWORK_CHUNK_HEADER:
+        raise Malformed("size")
+    artwork_id, offset = struct.unpack_from("<II", data)
+    chunk = data[ARTWORK_CHUNK_HEADER:]
+    if artwork_id == 0 or offset + len(chunk) > ARTWORK_MAX_BYTES:
+        raise Malformed("chunk")
+    return artwork_id, offset, chunk
+
+
+def encode_artwork_end(artwork_id: int, crc: int) -> bytes:
+    return struct.pack("<II", artwork_id, crc)
+
+
+def decode_artwork_end(data: bytes) -> tuple[int, int]:
+    if len(data) != 8:
+        raise Malformed("size")
+    artwork_id, crc = struct.unpack("<II", data)
+    if artwork_id == 0:
+        raise Malformed("id")
+    return artwork_id, crc
 
 
 def fragment(msg_type: int, seq: int, payload: bytes, mtu: int) -> list[bytes]:

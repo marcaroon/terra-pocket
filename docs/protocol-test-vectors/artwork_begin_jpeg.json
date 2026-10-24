@@ -1,0 +1,14 @@
+{
+  "name": "artwork_begin_jpeg",
+  "kind": "artwork_begin",
+  "expect": "ok",
+  "note": "",
+  "bytes": "cdab34120100f000f00094260000",
+  "fields": [
+    305441741,
+    1,
+    240,
+    240,
+    9876
+  ]
+}

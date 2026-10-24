@@ -2,7 +2,7 @@
 //!
 //! Transport only: scanning, connecting, service discovery, TX notifications,
 //! RX writes and the DEVICE STATUS read. It knows nothing about the protocol
-//! payloads; `companion-core` drives the handshake. Automatic reconnect is M9.
+//! payloads; `companion-core` drives the handshake and reconnects (M9).
 #![cfg(windows)]
 
 use std::fmt;
@@ -10,7 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use windows::Devices::Bluetooth::Advertisement::{
-    BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher, BluetoothLEScanningMode,
+    BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher,
+    BluetoothLEAdvertisementWatcherStatus, BluetoothLEScanningMode,
 };
 use windows::Devices::Bluetooth::GenericAttributeProfile::{
     GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue, GattCommunicationStatus,
@@ -41,6 +42,8 @@ pub enum BleError {
     /// A GATT operation completed with a non-success status.
     Gatt(&'static str, i32),
     NotFound(&'static str),
+    /// The scan stopped on its own: Bluetooth is off or the adapter is gone.
+    RadioUnavailable,
 }
 
 impl fmt::Display for BleError {
@@ -52,6 +55,7 @@ impl fmt::Display for BleError {
             }
             Self::Gatt(what, status) => write!(f, "{what} failed (GATT status {status})"),
             Self::NotFound(what) => write!(f, "{what} not found"),
+            Self::RadioUnavailable => f.write_str("Bluetooth is off or the adapter is unavailable"),
         }
     }
 }
@@ -112,6 +116,11 @@ impl Found {
 /// Active scan for Terra advertisements (name in the advertisement, service UUID
 /// in the scan response). Returns early once a device is found if `first_only`.
 pub fn scan(timeout: Duration, first_only: bool) -> Result<Vec<Found>> {
+    scan_until(timeout, |found| first_only && !found.is_empty())
+}
+
+/// Like `scan`, but returns as soon as `done` accepts the devices seen so far.
+pub fn scan_until(timeout: Duration, mut done: impl FnMut(&[Found]) -> bool) -> Result<Vec<Found>> {
     let watcher = BluetoothLEAdvertisementWatcher::new()?;
     watcher.SetScanningMode(BluetoothLEScanningMode::Active)?;
     let found: Arc<Mutex<Vec<Found>>> = Arc::default();
@@ -142,16 +151,24 @@ pub fn scan(timeout: Duration, first_only: bool) -> Result<Vec<Found>> {
         }
         Ok(())
     }))?;
-    watcher.Start()?;
+    let started = watcher.Start();
     let deadline = Instant::now() + timeout;
-    while Instant::now() < deadline {
+    let mut aborted = started.is_err();
+    while !aborted && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(100));
-        if first_only && !found.lock().unwrap_or_else(|p| p.into_inner()).is_empty() {
+        if done(&found.lock().unwrap_or_else(|p| p.into_inner())) {
             break;
         }
+        // Documented WinRT behavior: with the radio off the watcher moves to
+        // Aborted instead of failing Start.
+        aborted = watcher.Status().map(|s| s == BluetoothLEAdvertisementWatcherStatus::Aborted).unwrap_or(false);
     }
-    watcher.Stop()?;
+    let _ = watcher.Stop();
     watcher.RemoveReceived(token)?;
+    started?;
+    if aborted {
+        return Err(BleError::RadioUnavailable);
+    }
     let list = found.lock().unwrap_or_else(|p| p.into_inner()).clone();
     Ok(list)
 }
@@ -166,13 +183,26 @@ pub enum LinkEvent {
 
 /// An open GATT link to Terra with TX notifications enabled.
 pub struct Link {
-    device: BluetoothLEDevice,
-    session: GattSession,
+    connection: Connection,
     rx: GattCharacteristic,
     tx: GattCharacteristic,
     status: GattCharacteristic,
-    tx_token: i64,
-    connection_token: i64,
+    tx_token: Option<i64>,
+    connection_token: Option<i64>,
+}
+
+// Also closes partial connections when discovery or handler registration fails.
+struct Connection {
+    device: BluetoothLEDevice,
+    session: GattSession,
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        let _ = self.session.SetMaintainConnection(false);
+        let _ = self.session.Close();
+        let _ = self.device.Close();
+    }
 }
 
 fn characteristic(
@@ -200,6 +230,9 @@ impl Link {
             .and_then(|id| GattSession::FromDeviceIdAsync(&id))
             .and_then(|op| op.join())
             .step("Open GATT session")?;
+        let connection = Connection { device, session };
+        let device = &connection.device;
+        let session = &connection.session;
         session.SetMaintainConnection(true).step("Maintain connection")?;
         // Windows has no explicit connect: the first GATT request opens the link.
         // Observed on this laptop: waiting for an active session first never
@@ -235,10 +268,11 @@ impl Link {
         let rx = characteristic(&service, RX_UUID, "RX characteristic")?;
         let tx = characteristic(&service, TX_UUID, "TX characteristic")?;
         let status = characteristic(&service, STATUS_UUID, "STATUS characteristic")?;
+        let mut link = Self { connection, rx, tx, status, tx_token: None, connection_token: None };
 
         let on_event = Arc::new(on_event);
         let packets = on_event.clone();
-        let tx_token = tx.ValueChanged(&TypedEventHandler::<GattCharacteristic, GattValueChangedEventArgs>::new(
+        link.tx_token = Some(link.tx.ValueChanged(&TypedEventHandler::<GattCharacteristic, GattValueChangedEventArgs>::new(
             move |_, args| {
                 if let Some(args) = args.as_ref() {
                     if let Ok(bytes) = to_bytes(&args.CharacteristicValue()?) {
@@ -247,9 +281,9 @@ impl Link {
                 }
                 Ok(())
             },
-        ))?;
+        ))?);
         let lost = on_event.clone();
-        let connection_token = device.ConnectionStatusChanged(&TypedEventHandler::<BluetoothLEDevice, IInspectable>::new(
+        link.connection_token = Some(link.connection.device.ConnectionStatusChanged(&TypedEventHandler::<BluetoothLEDevice, IInspectable>::new(
             move |device, _| {
                 if let Some(device) = device.as_ref() {
                     if device.ConnectionStatus()? == BluetoothConnectionStatus::Disconnected {
@@ -258,8 +292,7 @@ impl Link {
                 }
                 Ok(())
             },
-        ))?;
-        let link = Self { device, session, rx, tx, status, tx_token, connection_token };
+        ))?);
         let status = link
             .tx
             .WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify)
@@ -272,7 +305,7 @@ impl Link {
     /// Maximum packet length for the current ATT MTU (MTU - 3), capped at the
     /// firmware limit. The MTU can grow after connecting, so read it per message.
     pub fn max_packet(&self) -> usize {
-        let mtu = self.session.MaxPduSize().unwrap_or(23) as usize;
+        let mtu = self.connection.session.MaxPduSize().unwrap_or(23) as usize;
         mtu.saturating_sub(3).clamp(20, MAX_PACKET)
     }
 
@@ -290,14 +323,14 @@ impl Link {
     }
 
     pub fn is_connected(&self) -> bool {
-        self.device.ConnectionStatus().map(|s| s == BluetoothConnectionStatus::Connected).unwrap_or(false)
+        self.connection.device.ConnectionStatus().map(|s| s == BluetoothConnectionStatus::Connected).unwrap_or(false)
     }
 }
 
 impl Drop for Link {
     fn drop(&mut self) {
-        let _ = self.tx.RemoveValueChanged(self.tx_token);
-        let _ = self.device.RemoveConnectionStatusChanged(self.connection_token);
+        if let Some(token) = self.tx_token { let _ = self.tx.RemoveValueChanged(token); }
+        if let Some(token) = self.connection_token { let _ = self.connection.device.RemoveConnectionStatusChanged(token); }
         if self.is_connected() {
             let _ = self
                 .tx
@@ -306,9 +339,6 @@ impl Drop for Link {
                 )
                 .and_then(|op| op.join());
         }
-        let _ = self.session.SetMaintainConnection(false);
-        let _ = self.session.Close();
-        let _ = self.device.Close();
     }
 }
 

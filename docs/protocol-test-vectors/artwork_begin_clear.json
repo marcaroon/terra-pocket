@@ -1,0 +1,14 @@
+{
+  "name": "artwork_begin_clear",
+  "kind": "artwork_begin",
+  "expect": "ok",
+  "note": "",
+  "bytes": "0000000000000000000000000000",
+  "fields": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ]
+}

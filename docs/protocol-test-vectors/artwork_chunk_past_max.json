@@ -1,0 +1,8 @@
+{
+  "name": "artwork_chunk_past_max",
+  "kind": "artwork_chunk",
+  "expect": "malformed",
+  "note": "ends past 32768",
+  "bytes": "01000000ff7f00007879",
+  "fields": []
+}

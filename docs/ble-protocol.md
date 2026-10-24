@@ -76,9 +76,13 @@ Paket yang dibuang tidak memutus koneksi dan tidak boleh me-reboot perangkat.
 | 0x20 | MEDIA_COMMAND | ESP → PC | 3 byte (§4.5) |
 | 0x30 | DEVICE_STATUS | ESP → PC | 8 byte (§4.6) |
 | 0x40 | ERROR | dua arah | 3 byte (§4.7) |
+| 0x50 | ARTWORK_BEGIN | PC → ESP | 14 byte (§4.8, V2) |
+| 0x51 | ARTWORK_CHUNK | PC → ESP | 9–512 byte (§4.8, V2) |
+| 0x52 | ARTWORK_END | PC → ESP | 8 byte (§4.8, V2) |
 
-Tipe 0x50–0x52, 0x60, 0x70 dicadangkan untuk masa depan dan **tidak** didukung di
-V1. Payload harus tepat sepanjang yang didefinisikan; byte berlebih atau kurang
+Tipe 0x60, 0x70 dicadangkan untuk masa depan dan **tidak** didukung. Pesan artwork
+0x50–0x52 (V2) hanya dikirim ke perangkat yang mengiklankan capability bit3;
+`protocol_version` tetap 1. Payload harus tepat sepanjang yang didefinisikan; byte berlebih atau kurang
 berarti pesan malformed.
 
 ## 4. Payload
@@ -91,7 +95,8 @@ u8  firmware_major
 u8  firmware_minor
 u8  firmware_patch
 u16 capabilities       bit0 render MEDIA_STATE, bit1 render VOLUME_STATE,
-                       bit2 mengirim MEDIA_COMMAND; bit lain 0
+                       bit2 mengirim MEDIA_COMMAND, bit3 menampilkan artwork
+                       (V2, §4.8); bit lain 0
 ```
 
 ### 4.2 HELLO_ACK
@@ -140,6 +145,20 @@ i16 value
 `value` harus 0 untuk PLAY_PAUSE, NEXT, PREVIOUS, MUTE_TOGGLE. VOLUME_DELTA
 memakai −100…100 kecuali 0 (encoder V1: +2 / −2). SEEK_DELTA tidak didukung di V1.
 
+Implementasi M7 (firmware 0.3.0): mengirim PLAY_PAUSE/NEXT/PREVIOUS saja setelah
+READY dan mengiklankan capability bit2. Encoder volume/mute masih log lokal (M8).
+
+Implementasi M8 (firmware 0.4.0): encoder mengirim VOLUME_DELTA +2/−2 per klik,
+tombol encoder MUTE_TOGGLE, dengan aturan antrean yang sama. Companion membalas
+dengan VOLUME_STATE berisi nilai yang dibaca ulang dari Windows (bukan nilai
+yang diminta) dan juga mengirim VOLUME_STATE saat volume diubah dari Windows.
+Wire format tidak berubah; tidak ada vector baru.
+Perintah tidak mengubah layar secara optimistis: hasil playback berasal dari
+MEDIA_STATE berikutnya. Tidak ada retry aplikasi/ACK command di V1; kegagalan
+notify dapat kehilangan satu tekanan dan dicatat di firmware. Antrean tombol
+dibatasi ke sesi READY saat tekanan diteruskan, kedaluwarsa setelah 500 ms,
+dan dibuang saat disconnect atau re-handshake.
+
 ### 4.6 DEVICE_STATUS
 
 ```text
@@ -167,6 +186,58 @@ u8 related_seq   sequence pesan yang ditolak
 
 Penerima ERROR hanya mencatatnya; tidak ada balasan ERROR untuk ERROR.
 
+### 4.8 Album artwork (V2)
+
+Companion mengirim cover lagu yang sedang tampil sebagai satu JPEG baseline
+240×240, selebar layar (spesifikasi proyek §36 menyebut 160×160; diubah atas
+permintaan pengguna agar cover bisa tampil layar penuh), dipotong persegi di
+tengah dari thumbnail Windows. Hanya untuk perangkat dengan capability bit3; firmware tanpa bit itu
+(≤ 0.4.0) tidak pernah menerima pesan ini.
+
+```text
+ARTWORK_BEGIN (0x50), 14 byte
+u32 artwork_id   ≠ 0; companion memakai CRC-32 JPEG (0 diganti 1)
+u8  format       1 = JPEG baseline
+u8  reserved     0
+u16 width        240
+u16 height       240
+u32 size         1–32768 byte JPEG
+                 size 0 = lagu ini tidak punya artwork; semua field lain 0
+
+ARTWORK_CHUNK (0x51), 9–512 byte
+u32 artwork_id
+u32 offset       = jumlah byte yang sudah diterima (berurutan, tanpa celah)
+u8[] data        ≥ 1 byte; offset + panjang ≤ 32768
+
+ARTWORK_END (0x52), 8 byte
+u32 artwork_id
+u32 crc32        CRC-32/ISO-HDLC (zlib) atas seluruh JPEG
+```
+
+Companion memakai chunk ≤ 232 byte agar satu chunk muat satu paket pada MTU 247,
+dan menyelipkan event lain (tombol, media, volume) di antara chunk.
+
+Perilaku penerima:
+
+1. Hanya saat READY; selain itu ERROR `NOT_READY`.
+2. BEGIN baru selalu membuang transfer yang belum selesai. BEGIN dengan size 0
+   menghapus artwork di layar.
+3. CHUNK dengan id lain, offset tidak sama dengan byte yang sudah diterima,
+   atau melampaui size → ERROR `MALFORMED` dan transfer dibuang.
+4. END dengan id lain, byte kurang, CRC berbeda, atau JPEG yang tidak bisa
+   di-decode menjadi 240×240 → ERROR `MALFORMED`; layar tidak berubah.
+5. END yang sah: JPEG di-decode (TJpgDec ROM) lalu ditampilkan.
+6. MEDIA_STATE dengan source/judul/artis berbeda (lagu berganti), disconnect,
+   unsubscribe, dan HELLO baru menghapus artwork di layar dan membuang transfer.
+   Artwork selalu dikirim **setelah** MEDIA_STATE lagunya.
+
+Firmware 0.5.0 hanya menerima 160×160 dan menolak BEGIN 240×240 (MALFORMED);
+companion lalu berhenti mencoba untuk lagu itu. Pilihan tampilan (teks atau
+cover layar penuh) diatur di perangkat dan tidak lewat protokol.
+
+Companion tidak mengulang transfer yang ditolak untuk lagu yang sama. Tidak ada
+ACK; layar menunjukkan hasilnya. Vector: `artwork_*`, `crc32_*`, `hello_artwork`.
+
 ## 5. Handshake dan state link
 
 ```text
@@ -183,6 +254,8 @@ disconnect dari state mana pun ─► ADVERTISING (reassembler dan media direset
    mengirim status 1 dan berhenti menyinkronkan media.
 4. Firmware masuk READY hanya jika HELLO_ACK `protocol_version = 1` dan
    `status = 0`; selain itu PROTOCOL_MISMATCH dan layar menampilkan ketidakcocokan.
+   HELLO_ACK hanya diterima pada CONNECTED setelah subscribe TX. ACK sebelum
+   subscribe atau ACK duplikat saat READY mendapat ERROR `NOT_READY`.
 5. MEDIA_STATE / VOLUME_STATE sebelum READY dijawab ERROR `NOT_READY`.
 6. Firmware menjawab pesan yang di-reassembly tetapi tidak sah dengan ERROR:
    versi beda `UNSUPPORTED_VERSION` (hanya pada paket START), payload salah

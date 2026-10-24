@@ -3,6 +3,6 @@
   "kind": "hello",
   "expect": "malformed",
   "note": "five bytes",
-  "bytes": "0100020003",
+  "bytes": "010005000f",
   "fields": []
 }

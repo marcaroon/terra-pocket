@@ -9,6 +9,7 @@ publish.workspace = true
 protocol = { path = "../protocol" }
 
 [target.'cfg(windows)'.dependencies]
+audio-windows = { path = "../audio-windows" }
 ble-windows = { path = "../ble-windows" }
 media-windows = { path = "../media-windows" }
 

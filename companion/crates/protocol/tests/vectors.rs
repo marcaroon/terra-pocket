@@ -82,6 +82,23 @@ fn check_payload(name: &str, kind: &str, ok: bool, f: &[&str]) {
             assert_eq!((e.code, e.related_type, e.related_seq), (num(f[0]), num(f[1]), num(f[2])), "{name}");
             e.encode().unwrap()
         }),
+        "artwork_begin" => ArtworkBegin::decode(&data).map(|b| {
+            assert_eq!((b.id, b.format, b.width, b.height, b.size),
+                       (num(f[0]), num(f[1]), num(f[2]), num(f[3]), num(f[4])), "{name}");
+            b.encode().unwrap()
+        }),
+        "artwork_chunk" => ArtworkChunk::decode(&data).map(|c| {
+            assert_eq!((c.id, c.offset, c.data.clone()), (num(f[0]), num(f[1]), unhex(f[2])), "{name}");
+            c.encode().unwrap()
+        }),
+        "artwork_end" => ArtworkEnd::decode(&data).map(|e| {
+            assert_eq!((e.id, e.crc32), (num(f[0]), num(f[1])), "{name}");
+            e.encode().unwrap()
+        }),
+        "crc32" => {
+            assert_eq!(crc32(&data), num::<u32>(f[0]), "{name}");
+            Ok(data.clone())
+        }
         other => panic!("unknown kind {other}"),
     };
     assert_eq!(reencoded.is_ok(), ok, "{name}");
@@ -163,5 +180,8 @@ fn edge_cases() {
     let wrapped = r.push(&[1, 0x11, FLAG_END, 7, 0], 20);
     assert_eq!(wrapped.drops, Drops(0));
     assert_eq!(wrapped.message.unwrap().payload, vec![5, 0]);
-    assert_eq!(MessageType::from_u8(0x50), None);
+    assert_eq!(MessageType::from_u8(0x50), Some(MessageType::ArtworkBegin));
+    assert_eq!(MessageType::from_u8(0x53), None);
+    assert!(ArtworkChunk { id: 1, offset: u32::MAX, data: vec![1] }.encode().is_err());
+    assert!(ArtworkChunk { id: 1, offset: 0, data: vec![0; MAX_MESSAGE - 7] }.encode().is_err());
 }

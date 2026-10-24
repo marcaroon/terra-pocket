@@ -87,7 +87,8 @@ Semua input active-low, pull-up internal 3,3 V. Jika modul encoder memiliki VCC,
 gunakan 3V3, bukan 5 V. Encoder pengguna terukur **half-step** (modul bergaya
 KY-040 dengan pull-up): detent di AB=11 dan AB=00, dua transisi per klik.
 `BOARD_ENCODER_HALF_STEP` memilih decoder; set `false` untuk EC11 full-step.
-Debounce sakelar 40 ms; polling encoder 1 ms; langkah volume 2. Arah bisa dibalik
+Debounce sakelar 40 ms; polling encoder 1 ms; langkah volume 2. Tombol encoder:
+tekan singkat = mute (saat dilepas), tekan ≥ 600 ms = ganti tampilan teks/cover (V2). Arah bisa dibalik
 dengan `BOARD_ENCODER_DIRECTION`. Tahan tombol tidak mengulang event; tombol yang
 ditahan saat boot harus dilepas sebelum penekanan berikutnya dihitung.
 

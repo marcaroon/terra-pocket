@@ -1,0 +1,8 @@
+{
+  "name": "artwork_end_short",
+  "kind": "artwork_end",
+  "expect": "malformed",
+  "note": "7 bytes",
+  "bytes": "cdab34122639f4",
+  "fields": []
+}

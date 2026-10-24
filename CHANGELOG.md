@@ -1,6 +1,102 @@
 # Changelog
 
-## Unreleased — M6 Windows BLE client
+## Unreleased — V2 album artwork (2026-10-12)
+
+- Cover layar penuh (firmware 0.6.0): artwork menjadi 240×240 dan tampil sendirian
+  memenuhi layar sebagai tampilan kedua. Tekan lama encoder (≥ 600 ms) berganti
+  antara tampilan teks (seperti M4) dan cover; pilihan disimpan di NVS. Tekan
+  singkat tetap mute, kini dikirim saat tombol dilepas. Tata letak cover 160×160
+  di atas teks dihapus. 80 vector (BEGIN 160×160 kini ditolak).
+
+- Protokol: ARTWORK_BEGIN/CHUNK/END (0x50–0x52) dan capability bit3, didokumentasikan
+  di `ble-protocol.md` §4.8; `protocol_version` tetap 1, firmware/companion lama
+  tetap kompatibel. 79 vector bersama Python/C/Rust (termasuk CRC-32).
+- Firmware 0.5.0: penerima artwork berurutan dengan CRC ke PSRAM, decode JPEG
+  baseline 160×160 dengan TJpgDec ROM (tanpa komponen baru), tata letak cover
+  160×160 dengan judul/artis satu baris, progres, ikon play/pause dan volume.
+  Tata letak teks tetap dipakai tanpa artwork. Stack task transport 6 KB.
+- Companion: thumbnail sesi GSMTC dipotong persegi, diskalakan dan di-encode JPEG
+  dengan `Windows.Graphics.Imaging` (tanpa crate baru); dikirim per chunk ≤ 232 byte
+  di sela event, hanya ke perangkat dengan bit3, sekali per lagu, dicoba ulang saat
+  thumbnail datang terlambat. `terra-cli artwork [FILE]`.
+- Stabilitas MVP: clippy bersih (satu lint diperbaiki), 18 reset ESP berturut-turut
+  pulih otomatis, soak aplikasi release tanpa kenaikan memori/handle.
+
+## Unreleased — M10 aplikasi companion (2026-10-12)
+
+- `companion/app`: Tauri 2 (crate 2.11) + React 19 + TypeScript. Jendela
+  menampilkan perangkat, status link dan jeda retry, Now Playing, volume,
+  Auto Connect, Start with Windows, firmware/protocol/companion; tombol Reconnect.
+- Tray: status, Open, Reconnect, Exit; menutup jendela menyembunyikannya ke tray.
+  Start with Windows memakai `tauri-plugin-autostart` (`--minimized`), satu
+  instance lewat `tauri-plugin-single-instance`. Auto Connect disimpan di
+  `settings.json` di folder konfigurasi aplikasi.
+- `companion-core`: sesi melaporkan `Update` terstruktur (log, `Phase`, media,
+  volume) dan menerima `Control` stop/reconnect; `run_forever` mengembalikan
+  `Exit`. Keluaran CLI tidak berubah.
+- CI: job `app` (npm ci, build Tauri debug, tes pemetaan status).
+
+## Unreleased — M9 keandalan (2026-10-12)
+
+- `connect`/`monitor` tidak lagi berhenti saat link putus: sesi diulang dengan
+  backoff 1, 2, 4, 8, 15 s (reset setelah READY), alamat Terra terakhir
+  diutamakan dan scan berhenti begitu terlihat. Hanya ketidakcocokan protokol
+  yang mengakhiri program (exit 3).
+- `ble-windows`: `scan_until`, dan watcher yang `Aborted` (Bluetooth mati)
+  dilaporkan sebagai `RadioUnavailable`, bukan "tidak ditemukan".
+- Kegagalan baca GSMTC dicatat dan diulang 1 s alih-alih memutus BLE.
+- NO_MEDIA ditahan 5 s saat lagu sebelumnya masih tampil, menghilangkan kedipan
+  "Nothing Playing" di antara lagu Chrome/YouTube Music.
+- Event GSMTC selalu dibaca dalam 150 ms meski pembacaan ulang penundaan
+  NO_MEDIA sudah terjadwal (sebelumnya judul baru tertunda 6–7 s setelah Next).
+- Sesi tanpa judul dan artis (Spotify saat ditutup) diperlakukan sebagai NO_MEDIA.
+- Firmware tidak berubah (0.4.0). Diuji di hardware: Bluetooth off/on, restart ESP,
+  sleep/wake, Chrome ↔ Spotify, companion mati paksa dan dijalankan ulang.
+  Panduan [uji M9](docs/m9-test.md).
+
+## Unreleased — M8 volume (2026-10-12)
+
+- Firmware 0.4.0: encoder mengirim VOLUME_DELTA +2/−2 per klik dan tombol encoder
+  MUTE_TOGGLE saat READY, dengan aturan sesi/umur/antrean yang sama seperti tombol
+  media. Layar volume hanya berubah dari VOLUME_STATE. Wire format tidak berubah.
+- Crate `audio-windows`: Core Audio `IAudioEndpointVolume` untuk perangkat output
+  default (render/console): baca persen dan mute, step dengan clamp 0–100, toggle
+  mute, callback perubahan, dan rebind saat perangkat default berganti.
+  `unsafe` COM dibatasi ke satu modul; workspace lain tetap `forbid(unsafe_code)`.
+- Companion: perintah encoder dijalankan sekali, volume dibaca ulang lalu dikirim
+  sebagai VOLUME_STATE; perubahan dari Windows digabung 50 ms dan dikirim hanya bila
+  berubah; perangkat default diperiksa tiap detik. `terra-cli volume [--watch]`.
+- Tes: transport C untuk volume/mute dan perintah tidak sah, routing encoder Rust,
+  pembulatan/clamp volume, uji Core Audio nyata opsional (`--ignored`). CI menjalankan
+  smoke test `terra-cli volume`. Panduan [uji M8](docs/m8-test.md).
+
+## M7 dan pemeriksaan M6 (2026-10-12)
+
+- Tindak lanjut input: opsi diagnostik GPIO tekan/lepas (default mati). Laporan
+  klik berulang hilang belum memiliki akar penyebab yang terbukti; setelah flash
+  diagnostik, Play/Pause 8/8 diterima pada Apple Music. Debounce belum diubah.
+- Previous: capability false tidak lagi menghentikan request sebelum API dicoba;
+  status keberhasilan berasal dari hasil `Try*Async`. Uji Apple Music sebelumnya
+  mencatat Next 3/3 Accepted, Previous Unsupported. Uji ulang Previous Chrome
+  menghasilkan 4/4 command Accepted; pengguna mengonfirmasi tombol web YouTube
+  Music juga tidak selalu bereaksi. Belum ada dasar untuk retry atau perubahan
+  debounce; penerimaan M7 masih parsial (lihat validation.md).
+
+- Firmware 0.3.0: tiga tombol media menjadi MEDIA_COMMAND pada link READY,
+  capability bit2 aktif; perintah offline, kedaluwarsa, atau dari sesi lama dibuang.
+- Companion memakai GSMTC untuk Play/Pause, Next, Previous; hasil ditampilkan
+  sebagai Accepted/Rejected/Unsupported/NoSession. `monitor` adalah alias aktif
+  `connect`. Encoder volume/mute tetap M8.
+- Perbaikan M6: penggabungan event media tidak lagi membuang notifikasi BLE;
+  HELLO ulang divalidasi; deadline handshake berlaku meski paket terus masuk;
+  scan default selesai sebelum memilih RSSI terkuat.
+- Cleanup langganan media dan koneksi BLE pada inisialisasi parsial yang gagal;
+  aritmetika timeline tahan overflow. Unsubscribe firmware mereset reassembler,
+  HELLO_ACK hanya diterima setelah subscribe dan sebelum READY.
+- Tes transport produksi dengan radio/scheduler stub, regresi antrean Rust,
+  routing command, dan pembaruan panduan/status fase.
+
+## M6 Windows BLE client
 
 - Crate `ble-windows`: scan aktif (nama/UUID service), koneksi via `GattSession`
   dengan MaintainConnection, discovery service/karakteristik, handler TX dipasang

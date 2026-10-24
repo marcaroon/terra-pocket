@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window may call the Terra commands and listen for status events.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

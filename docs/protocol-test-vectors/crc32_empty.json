@@ -1,0 +1,10 @@
+{
+  "name": "crc32_empty",
+  "kind": "crc32",
+  "expect": "ok",
+  "note": "CRC-32/ISO-HDLC as in ARTWORK_END",
+  "bytes": "",
+  "fields": [
+    0
+  ]
+}

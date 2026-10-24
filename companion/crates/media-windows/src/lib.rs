@@ -1,7 +1,7 @@
 //! Windows media sessions through GSMTC (`Windows.Media.Control`), PROJECT_SPEC §18.
 //!
-//! M5 scope: read the current session (source, metadata, playback, timeline) and
-//! observe changes. Media commands (TryTogglePlayPauseAsync etc.) arrive with M7.
+//! Reads and observes the current session (M5), controls its playback (M7), and
+//! prepares its thumbnail as Terra album artwork (V2).
 #![cfg(windows)]
 
 use std::fmt;
@@ -9,7 +9,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use windows::ApplicationModel::AppInfo;
-use windows::Foundation::TypedEventHandler;
+use windows::Foundation::{PropertyType, PropertyValue, TypedEventHandler};
+use windows::Graphics::Imaging::{
+    BitmapAlphaMode, BitmapBounds, BitmapDecoder, BitmapEncoder, BitmapInterpolationMode, BitmapPixelFormat,
+    BitmapPropertySet, BitmapTransform, BitmapTypedValue, ColorManagementMode, ExifOrientationMode,
+};
+use windows::Storage::Streams::{DataReader, IRandomAccessStream, InMemoryRandomAccessStream};
 use windows::Media::Control::{
     CurrentSessionChangedEventArgs, MediaPropertiesChangedEventArgs, PlaybackInfoChangedEventArgs,
     SessionsChangedEventArgs, TimelinePropertiesChangedEventArgs,
@@ -17,7 +22,7 @@ use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSessionManager as Manager,
     GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status,
 };
-use windows::core::HSTRING;
+use windows::core::{HSTRING, Interface};
 
 /// A Windows API call failed; carries the HRESULT message.
 #[derive(Debug)]
@@ -38,6 +43,12 @@ impl From<windows::core::Error> for MediaError {
 }
 
 pub type Result<T> = std::result::Result<T, MediaError>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlCommand { PlayPause, Next, Previous }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlOutcome { Accepted, Rejected, Unsupported, NoSession }
 
 type Notify = Arc<dyn Fn() + Send + Sync>;
 
@@ -110,10 +121,10 @@ pub fn estimate_position(
     now: i64,
     playing: bool,
 ) -> (u64, u64) {
-    let duration = (end - start).max(0);
-    let mut current = (position - start).max(0);
+    let duration = end.saturating_sub(start).max(0);
+    let mut current = position.saturating_sub(start).max(0);
     if playing && last_updated > 0 && now > last_updated {
-        current = current.saturating_add(now - last_updated);
+        current = current.saturating_add(now.saturating_sub(last_updated));
     }
     if duration > 0 {
         current = current.min(duration);
@@ -180,6 +191,90 @@ fn snapshot(session: &Session) -> Result<MediaSnapshot> {
     })
 }
 
+/// The current session's thumbnail, cropped to a centered square, scaled and
+/// re-encoded as a baseline JPEG that Terra's decoder accepts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Artwork {
+    /// Track the thumbnail belongs to, to match it with the MEDIA_STATE sent.
+    pub title: String,
+    pub artist: String,
+    pub jpeg: Vec<u8>,
+}
+
+/// JPEG qualities tried in order until the image fits the size limit.
+const ARTWORK_QUALITIES: [f32; 4] = [0.85, 0.7, 0.55, 0.4];
+
+/// Scaled size and centered crop that turn a `width` x `height` image into a
+/// `side` x `side` square covering it (short side scaled to `side`).
+pub fn cover_crop(width: u32, height: u32, side: u32) -> Option<((u32, u32), BitmapBounds)> {
+    if width == 0 || height == 0 || side == 0 {
+        return None;
+    }
+    let short = width.min(height) as u64;
+    let scale = |n: u32| ((n as u64 * side as u64 + short / 2) / short).clamp(side as u64, u32::MAX as u64) as u32;
+    let (scaled_width, scaled_height) = (scale(width), scale(height));
+    let bounds = BitmapBounds { X: (scaled_width - side) / 2, Y: (scaled_height - side) / 2, Width: side, Height: side };
+    Some(((scaled_width, scaled_height), bounds))
+}
+
+fn encode_jpeg(bgra: &[u8], side: u32, quality: f32) -> Result<Vec<u8>> {
+    let stream = InMemoryRandomAccessStream::new()?;
+    let options = BitmapPropertySet::new()?;
+    let value = BitmapTypedValue::Create(&PropertyValue::CreateSingle(quality)?, PropertyType::Single)?;
+    options.Insert(&HSTRING::from("ImageQuality"), &value)?;
+    let encoder = BitmapEncoder::CreateWithEncodingOptionsAsync(BitmapEncoder::JpegEncoderId()?, &stream, &options)?.join()?;
+    encoder.SetPixelData(BitmapPixelFormat::Bgra8, BitmapAlphaMode::Ignore, side, side, 96.0, 96.0, bgra)?;
+    encoder.FlushAsync()?.join()?;
+    let size = u32::try_from(stream.Size()?).unwrap_or(u32::MAX);
+    let reader = DataReader::CreateDataReader(&stream.GetInputStreamAt(0)?)?;
+    reader.LoadAsync(size)?.join()?;
+    let mut jpeg = vec![0u8; reader.UnconsumedBufferLength()? as usize];
+    reader.ReadBytes(&mut jpeg)?;
+    Ok(jpeg)
+}
+
+fn session_artwork(session: &Session, side: u32, max_bytes: usize) -> Result<Option<Artwork>> {
+    let properties = session.TryGetMediaPropertiesAsync()?.join()?;
+    let reference = match properties.Thumbnail() {
+        Ok(reference) => reference,
+        Err(error) if error.code().is_ok() => return Ok(None), // the app published none
+        Err(error) => return Err(error.into()),
+    };
+    let stream: IRandomAccessStream = reference.OpenReadAsync()?.join()?.cast()?;
+    let decoder = BitmapDecoder::CreateAsync(&stream)?.join()?;
+    let Some(((width, height), bounds)) =
+        cover_crop(decoder.OrientedPixelWidth()?, decoder.OrientedPixelHeight()?, side)
+    else {
+        return Ok(None);
+    };
+    let transform = BitmapTransform::new()?;
+    transform.SetScaledWidth(width)?;
+    transform.SetScaledHeight(height)?;
+    transform.SetInterpolationMode(BitmapInterpolationMode::Fant)?;
+    transform.SetBounds(bounds)?;
+    let pixels = decoder
+        .GetPixelDataTransformedAsync(
+            BitmapPixelFormat::Bgra8,
+            BitmapAlphaMode::Ignore,
+            &transform,
+            ExifOrientationMode::RespectExifOrientation,
+            ColorManagementMode::ColorManageToSRgb,
+        )?
+        .join()?
+        .DetachPixelData()?;
+    for quality in ARTWORK_QUALITIES {
+        let jpeg = encode_jpeg(&pixels, side, quality)?;
+        if jpeg.len() <= max_bytes {
+            return Ok(Some(Artwork {
+                title: properties.Title()?.to_string(),
+                artist: properties.Artist()?.to_string(),
+                jpeg,
+            }));
+        }
+    }
+    Ok(None) // even the lowest quality is too large; show no artwork
+}
+
 /// Entry point to the GSMTC session manager.
 pub struct MediaReader {
     manager: Manager,
@@ -198,6 +293,43 @@ impl MediaReader {
             Err(error) if error.code().is_ok() => Ok(None),
             Err(error) => Err(error.into()),
         }
+    }
+
+    /// The current session's thumbnail as a `side` x `side` baseline JPEG of at
+    /// most `max_bytes`, or `None` when there is no session or thumbnail.
+    pub fn artwork(&self, side: u32, max_bytes: usize) -> Result<Option<Artwork>> {
+        match self.manager.GetCurrentSession() {
+            Ok(session) => session_artwork(&session, side, max_bytes),
+            Err(error) if error.code().is_ok() => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// Resolve the current session for each press, including after app switches.
+    /// A false WinRT result is a rejected request, not a successful state change.
+    pub fn control(&self, command: ControlCommand) -> Result<ControlOutcome> {
+        let session = match self.manager.GetCurrentSession() {
+            Ok(session) => session,
+            Err(error) if error.code().is_ok() => return Ok(ControlOutcome::NoSession),
+            Err(error) => return Err(error.into()),
+        };
+        let controls = session.GetPlaybackInfo()?.Controls()?;
+        let enabled = match command {
+            ControlCommand::PlayPause => controls.IsPlayPauseToggleEnabled()?,
+            ControlCommand::Next => controls.IsNextEnabled()?,
+            ControlCommand::Previous => controls.IsPreviousEnabled()?,
+        };
+        // Try* reports success/failure; do not skip a request solely on a capability snapshot.
+        let operation = match command {
+            ControlCommand::PlayPause => session.TryTogglePlayPauseAsync()?,
+            ControlCommand::Next => session.TrySkipNextAsync()?,
+            ControlCommand::Previous => session.TrySkipPreviousAsync()?,
+        };
+        Ok(match (operation.join()?, enabled) {
+            (true, _) => ControlOutcome::Accepted,
+            (false, true) => ControlOutcome::Rejected,
+            (false, false) => ControlOutcome::Unsupported,
+        })
     }
 
     /// Calls `on_change` whenever the current session changes or the current
@@ -220,7 +352,10 @@ impl MediaReader {
                 tx();
                 Ok(())
             },
-        ))?;
+        )).map_err(|error| {
+            let _ = self.manager.RemoveCurrentSessionChanged(current);
+            MediaError::from(error)
+        })?;
         let watch = MediaWatch {
             manager: self.manager.clone(),
             manager_tokens: (current, sessions),
@@ -250,7 +385,11 @@ impl MediaWatch {
     /// Moves the per-session subscriptions to the current session if it changed
     /// (spec §18: unsubscribe old, select new, subscribe new).
     pub fn sync(&self) -> Result<()> {
-        let current = self.manager.GetCurrentSession().ok();
+        let current = match self.manager.GetCurrentSession() {
+            Ok(session) => Some(session),
+            Err(error) if error.code().is_ok() => None,
+            Err(error) => return Err(error.into()),
+        };
         let mut guard = self.session.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let same = match (&*guard, &current) {
             (Some(old), Some(new)) => {
@@ -273,6 +412,7 @@ impl MediaWatch {
     }
 
     fn subscribe(&self, session: Session) -> Result<Subscribed> {
+        let app_id = session.SourceAppUserModelId()?.to_string();
         let tx = self.changes.clone();
         let media = session.MediaPropertiesChanged(
             &TypedEventHandler::<Session, MediaPropertiesChangedEventArgs>::new(move |_, _| {
@@ -286,15 +426,21 @@ impl MediaWatch {
                 tx();
                 Ok(())
             }),
-        )?;
+        ).map_err(|error| {
+            let _ = session.RemoveMediaPropertiesChanged(media);
+            MediaError::from(error)
+        })?;
         let tx = self.changes.clone();
         let timeline = session.TimelinePropertiesChanged(
             &TypedEventHandler::<Session, TimelinePropertiesChangedEventArgs>::new(move |_, _| {
                 tx();
                 Ok(())
             }),
-        )?;
-        let app_id = session.SourceAppUserModelId()?.to_string();
+        ).map_err(|error| {
+            let _ = session.RemoveMediaPropertiesChanged(media);
+            let _ = session.RemovePlaybackInfoChanged(playback);
+            MediaError::from(error)
+        })?;
         Ok(Subscribed { session, app_id, tokens: [media, playback, timeline] })
     }
 }
@@ -331,6 +477,24 @@ mod tests {
         assert_eq!(estimate_position(15_000 * MS, 5_000 * MS, 20_000 * MS, 1, 100_000 * MS, true), (15_000, 15_000));
         // No timeline published.
         assert_eq!(estimate_position(0, 0, 0, 0, 5, true), (0, 0));
+        // Malformed/extreme app timelines cannot overflow subtraction.
+        assert_eq!(estimate_position(i64::MAX, i64::MIN, i64::MAX, 1, i64::MAX, true),
+            ((i64::MAX / MS) as u64, (i64::MAX / MS) as u64));
+    }
+
+    #[test]
+    fn cover_crop_fills_the_square() {
+        let crop = |w, h| cover_crop(w, h, 160).map(|((sw, sh), b)| (sw, sh, b.X, b.Y, b.Width, b.Height));
+        assert_eq!(crop(300, 300), Some((160, 160, 0, 0, 160, 160)));
+        // 16:9 video thumbnail: scale the height to 160 and cut the sides.
+        assert_eq!(crop(1280, 720), Some((284, 160, 62, 0, 160, 160)));
+        assert_eq!(crop(720, 1280), Some((160, 284, 0, 62, 160, 160)));
+        // Small images are scaled up.
+        assert_eq!(crop(64, 64), Some((160, 160, 0, 0, 160, 160)));
+        assert_eq!(crop(161, 160), Some((161, 160, 0, 0, 160, 160)));
+        assert_eq!(crop(0, 100), None);
+        // Extreme aspect ratios cannot overflow.
+        assert_eq!(crop(u32::MAX, 1), Some((u32::MAX, 160, (u32::MAX - 160) / 2, 0, 160, 160)));
     }
 
     #[test]

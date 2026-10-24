@@ -1,6 +1,6 @@
 # Development
 
-Fase terkini: **M3 BLE GATT + M4 protokol** di atas M2 input dan N0 diagnostik USB.
+Fase terkini: **M7 kontrol tombol**, di atas M3/M4 BLE/protokol dan M5/M6 companion.
 Wire format kanonik: [ble-protocol.md](ble-protocol.md). Uji M2/N0 tetap di
 [m2-n0-test.md](m2-n0-test.md). Profil `normal` memakai console USB native;
 profil `usb-probe` memakai COM/UART. Keduanya berisi BLE.
@@ -30,8 +30,8 @@ konfigurasi firmware atau fitur runtime.
 
 Companion: Rust stable dengan target Windows. Pada komputer pengembangan biasa,
 gunakan MSVC + Visual Studio Build Tools C++. Validasi lokal awal juga dapat
-memakai GNU target + GCC/MinGW-w64; crate saat ini tidak memanggil Win32.
-Validasi integrasi Windows nantinya tetap harus menggunakan API/hardware nyata.
+memakai GNU target + GCC/MinGW-w64; `media-windows` dan `ble-windows` memakai
+windows-rs/WinRT. Hasil uji API/hardware nyata dicatat terpisah dari unit test.
 
 Catatan toolchain lokal: Rust 1.98.1 GNU bersama w64devkit 2.10.0 gagal link
 `-lgcc_eh` pada deteksi runtime otomatis. Library itu tersedia dalam distribusi
@@ -64,8 +64,13 @@ docs/protocol-test-vectors`; CI membandingkan hasilnya dengan isi repo.
 
 CLI: `terra-cli media` mencetak sesi media Windows saat ini (exit 0, termasuk
 "No active media session"; exit 1 bila GSMTC tidak tersedia). `terra-cli media --watch`
-mencetak satu baris per perubahan lagu/playback/seek sampai Ctrl+C. `devices`,
-`connect`, dan `monitor` sengaja exit 2 sampai M6 agar tidak mengesankan fitur selesai.
+mencetak satu baris per perubahan lagu/playback/seek sampai Ctrl+C. `devices`
+melakukan scan 8 detik. `connect [ALAMAT]` menyinkronkan media dan menjalankan
+tombol M7; tanpa alamat melakukan scan 10 detik dan memilih RSSI terkuat.
+`monitor [ALAMAT]` adalah alias aktif `connect`, termasuk eksekusi tombol.
+Input tidak valid exit 2, ketidakcocokan versi exit 3, kegagalan sesi exit 1.
+Setelah disconnect jalankan ulang; reconnect otomatis masih M9.
+Panduan penerimaan tombol: [m7-test.md](m7-test.md).
 
 ## Preview UI di komputer
 
@@ -165,10 +170,18 @@ Keluaran yang diharapkan:
 
 Layar Terra menampilkan source, judul, artis, dan timeline yang berjalan. Satu baris
 `[MEDIA]` baru muncul hanya saat lagu, play/pause, atau posisi (seek > 1,5 s) berubah.
-Volume masih `VOL --` sampai M8. Hentikan dengan Ctrl+C; layar kembali ke
+Sejak M8 baris `[VOLUME] NN` muncul setelah handshake dan LCD menampilkan
+`VOL NN` (uji encoder: [m8-test.md](m8-test.md)). Hentikan dengan Ctrl+C; layar kembali ke
 `Waiting for computer...`. Hanya satu central: tutup harness Python atau aplikasi
 lain yang terhubung ke Terra lebih dulu. Exit code `connect`: 0 setelah disconnect,
 1 gagal (tidak ditemukan, BLE/GATT error), 3 versi protokol tidak cocok.
+
+## Aplikasi companion (M10)
+
+Lihat [companion/app/README.md](../companion/app/README.md) untuk build dan
+[m10-test.md](m10-test.md) untuk penerimaan. Pada laptop pengembangan, Tauri
+dibangun dengan toolchain Rust GNU lokal (`scripts/activate-local.ps1`); CI
+memakai runner Windows standar (MSVC).
 
 ## Referensi API
 

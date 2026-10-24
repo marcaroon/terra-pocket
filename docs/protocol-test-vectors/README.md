@@ -21,6 +21,10 @@ Each vector has `<name>.bin` (raw bytes) and `<name>.json` (human description).
 | `hello_ack` | payload | version, major, minor, patch, status |
 | `device_status` | payload | version, major, minor, patch, link, flags, rx_errors |
 | `error` | payload | code, related_type, related_seq |
+| `artwork_begin` | payload | id, format, width, height, size (V2) |
+| `artwork_chunk` | payload | id, offset, data hex (V2) |
+| `artwork_end` | payload | id, crc32 (V2) |
+| `crc32` | data | CRC-32/ISO-HDLC of the data, decimal (no re-encode) |
 | `fragment` | packets, each prefixed by u16 LE length | type, seq, mtu, payload hex |
 | `stream` | records: u16 LE length, u32 LE time_ms, packet | per packet `drops/status`, `;`-separated |
 

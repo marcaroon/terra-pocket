@@ -1,0 +1,8 @@
+{
+  "name": "artwork_begin_reserved",
+  "kind": "artwork_begin",
+  "expect": "malformed",
+  "note": "reserved byte",
+  "bytes": "010000000101f000f00064000000",
+  "fields": []
+}

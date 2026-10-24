@@ -1,0 +1,14 @@
+{
+  "name": "artwork_begin_max",
+  "kind": "artwork_begin",
+  "expect": "ok",
+  "note": "",
+  "bytes": "010000000100f000f00000800000",
+  "fields": [
+    1,
+    1,
+    240,
+    240,
+    32768
+  ]
+}
