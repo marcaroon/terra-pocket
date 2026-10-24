@@ -83,6 +83,8 @@ jobs:
           & ./target/debug/terra-cli.exe devices
           if ($LASTEXITCODE -gt 1) { throw "devices exited $LASTEXITCODE" }
           & ./target/debug/terra-cli.exe monitor invalid-address
+          if ($LASTEXITCODE -ne 2) { throw 'Invalid monitor address must exit 2' }
+          exit 0
   app:
     runs-on: windows-latest
     defaults:
@@ -100,5 +102,3 @@ jobs:
       - name: Test app status mapping
         working-directory: companion/app/src-tauri
         run: cargo test --locked
-          if ($LASTEXITCODE -ne 2) { throw 'Invalid monitor address must exit 2' }
-          exit 0
